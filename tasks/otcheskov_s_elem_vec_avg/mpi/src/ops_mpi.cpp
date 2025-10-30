@@ -60,12 +60,12 @@ bool OtcheskovSElemVecAvgMPI::RunImpl() {
   int global_sum = 0;
   MPI_Reduce(&local_sum, &global_sum, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-  int average = 0;
+  double average = 0;
   if (ProcRank == 0) {
-    average = global_sum / total_size;
+    average = global_sum / static_cast<double>(total_size);
   }
 
-  MPI_Bcast(&average, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&average, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
   GetOutput() = average;
 

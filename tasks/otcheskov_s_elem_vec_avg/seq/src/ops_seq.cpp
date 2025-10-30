@@ -26,7 +26,7 @@ bool OtcheskovSElemVecAvgSEQ::PreProcessingImpl() {
 
 bool OtcheskovSElemVecAvgSEQ::RunImpl() {
   int sum = std::accumulate(GetInput().begin(), GetInput().end(), 0);
-  GetOutput() = sum / static_cast<int>(GetInput().size());
+  GetOutput() = sum / static_cast<double>(GetInput().size());
   return true;
 }
 
