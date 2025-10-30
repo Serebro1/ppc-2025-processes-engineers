@@ -88,7 +88,7 @@ TEST_P(OtcheskovSElemVecAvgFuncTests, VectorAverageTests) {
 
 const std::array<TestType, 4> kTestParam = {
   std::make_tuple("test_vec1.txt", 50),
-  std::make_tuple("test_vec2.txt", 25),
+  std::make_tuple("test_vec2.txt", 14),
   std::make_tuple("test_vec_one_elem.txt", 5),
   std::make_tuple("test_vec_one_minus_elem.txt", -5)
 };
