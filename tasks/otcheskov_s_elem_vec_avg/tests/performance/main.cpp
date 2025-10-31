@@ -19,7 +19,7 @@ class OtcheskovSElemVecAvgPerfTests : public ppc::util::BaseRunPerfTests<InType,
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
-    int expected_avg = (kVectorSize_ + 1) / 2;
+    double expected_avg = (kVectorSize_ + 1) / 2.0;
     return expected_avg == output_data;
   }
 
