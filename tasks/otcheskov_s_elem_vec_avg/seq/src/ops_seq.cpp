@@ -10,17 +10,16 @@ namespace otcheskov_s_elem_vec_avg {
 
 OtcheskovSElemVecAvgSEQ::OtcheskovSElemVecAvgSEQ(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
-  GetInput().clear();
   GetInput() = in;
-  GetOutput() = 0;
+  GetOutput() = NAN;
 }
 
 bool OtcheskovSElemVecAvgSEQ::ValidationImpl() {
-  return !GetInput().empty();
+  return (!GetInput().empty() && std::isnan(GetOutput()));
 }
 
 bool OtcheskovSElemVecAvgSEQ::PreProcessingImpl() {
-  GetOutput() = 0;
+  GetOutput() = 0.0;
   return true;
 }
 

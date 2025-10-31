@@ -13,20 +13,15 @@ namespace otcheskov_s_elem_vec_avg {
 OtcheskovSElemVecAvgMPI::OtcheskovSElemVecAvgMPI(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
   GetInput() = in;
-  GetOutput() = 0;
+  GetOutput() = NAN;
 }
 
 bool OtcheskovSElemVecAvgMPI::ValidationImpl() {
-  int ProcRank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &ProcRank);
-  if (ProcRank == 0) {
-    return !GetInput().empty();
-  }
-  return true;
+  return (!GetInput().empty() && std::isnan(GetOutput()));
 }
 
 bool OtcheskovSElemVecAvgMPI::PreProcessingImpl() {
-  GetOutput() = 0;
+  GetOutput() = 0.0;
   return true;
 }
 
