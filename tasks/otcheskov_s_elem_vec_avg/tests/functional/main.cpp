@@ -48,7 +48,7 @@ class OtcheskovSElemVecAvgFuncTests : public ppc::util::BaseRunFuncTests<InType,
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
-    return (expected_avg_ == output_data);
+    return std::fabs(expected_avg_ - output_data) < std::numeric_limits<double>::epsilon();
   }
 
   InType GetTestInputData() final {
@@ -91,7 +91,7 @@ class OtcheskovSElemVecAvgFuncTests : public ppc::util::BaseRunFuncTests<InType,
 
   static std::string RemoveTrailingZeros(double value) {
     std::stringstream ss;
-    ss << std::fixed << std::setprecision(2) << value;
+    ss << std::fixed << std::setprecision(10) << value;
     std::string str = ss.str();
     if(str.find('.') != std::string::npos) {
         str = str.substr(0, str.find_last_not_of('0') + 1);
@@ -105,14 +105,16 @@ class OtcheskovSElemVecAvgFuncTests : public ppc::util::BaseRunFuncTests<InType,
 
 namespace {
 
+
 TEST_P(OtcheskovSElemVecAvgFuncTests, VectorAverageTests) {
   ExecuteTest(GetParam());
 }
 
-const std::array<TestType, 3> kTestParam = {
+const std::array<TestType, 4> kTestParam = {
   std::make_tuple("test_vec1.txt", 50.5),
   std::make_tuple("test_vec2.txt", 14.5),
   std::make_tuple("test_vec_one_elem.txt", 5.0),
+  std::make_tuple("test_vec_fraction.txt", 4.0/3.0),
 };
 
 const auto kTestTasksList =
@@ -125,10 +127,6 @@ const auto kFuncTestName = OtcheskovSElemVecAvgFuncTests::PrintFuncTestName<Otch
 
 INSTANTIATE_TEST_SUITE_P(VectorAverageTests, OtcheskovSElemVecAvgFuncTests, kGtestValues, kFuncTestName);
 
-TEST_F(OtcheskovSElemVecAvgFuncTests, EmptyVector) {
-  SetUp();
-  
-}
 
 }  // namespace
 
