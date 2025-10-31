@@ -23,7 +23,7 @@ namespace otcheskov_s_elem_vec_avg {
 class OtcheskovSElemVecAvgFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType, TestType> {
  public:
   static std::string PrintTestParam(const TestType &test_param) {
-    std::string filename = SanitizeFileName(std::get<0>(test_param));
+    std::string filename = FormatFileName(std::get<0>(test_param));
     std::string avg_str = FormatAverage(std::get<1>(test_param));
     return filename + "_" + avg_str;
   }
@@ -59,20 +59,20 @@ class OtcheskovSElemVecAvgFuncTests : public ppc::util::BaseRunFuncTests<InType,
   InType input_data_;
   OutType expected_avg_;
 
-  static std::string SanitizeFileName(const std::string &filename) {
+  static std::string FormatFileName(const std::string &filename) {
     size_t lastindex = filename.find_last_of(".");
-    std::string base_name = filename;
+    std::string name = filename;
     if (lastindex != std::string::npos) {
-        base_name = filename.substr(0, lastindex);
+        name = filename.substr(0, lastindex);
     }
 
-    std::string safe_name = base_name;
-    for (char &c : safe_name) {
+    std::string format_name = name;
+    for (char &c : format_name) {
       if (!std::isalnum(c) && c != '_') {
         c = '_';
       }
     }
-    return safe_name;
+    return format_name;
   }
 
   static std::string FormatAverage(double value) {
@@ -92,29 +92,35 @@ class OtcheskovSElemVecAvgFuncTests : public ppc::util::BaseRunFuncTests<InType,
   static std::string RemoveTrailingZeros(double value) {
     std::stringstream ss;
     ss << std::fixed << std::setprecision(10) << value;
-    std::string str = ss.str();
-    if(str.find('.') != std::string::npos) {
-        str = str.substr(0, str.find_last_not_of('0') + 1);
-        if(str.find('.') == str.size() - 1) {
-            str = str.substr(0, str.size() - 1);
+
+    std::string str_value = ss.str();
+    if(str_value.find('.') != std::string::npos) {
+        str_value = str_value.substr(0, str_value.find_last_not_of('0') + 1);
+        if(str_value.find('.') == str_value.size() - 1) {
+            str_value = str_value.substr(0, str_value.size() - 1);
         }
     }
-    return str;
+    return str_value;
   }
 };
 
 namespace {
 
+TEST(Some_test, test) {
+  auto task = ppc::task::TaskGetter<OtcheskovSElemVecAvgSEQ, std::vector<int>>({});
+  EXPECT_FALSE(task->Validation());
+}
 
-TEST_P(OtcheskovSElemVecAvgFuncTests, VectorAverageTests) {
+TEST_P(OtcheskovSElemVecAvgFuncTests, VectorAverageFuncTests) {
   ExecuteTest(GetParam());
 }
 
-const std::array<TestType, 4> kTestParam = {
+const std::array<TestType, 5> kTestParam = {
   std::make_tuple("test_vec1.txt", 50.5),
   std::make_tuple("test_vec2.txt", 14.5),
   std::make_tuple("test_vec_one_elem.txt", 5.0),
   std::make_tuple("test_vec_fraction.txt", 4.0/3.0),
+  std::make_tuple("test_vec_five_million_elems.txt", 3.250287)
 };
 
 const auto kTestTasksList =
@@ -125,7 +131,7 @@ const auto kGtestValues = ppc::util::ExpandToValues(kTestTasksList);
 
 const auto kFuncTestName = OtcheskovSElemVecAvgFuncTests::PrintFuncTestName<OtcheskovSElemVecAvgFuncTests>;
 
-INSTANTIATE_TEST_SUITE_P(VectorAverageTests, OtcheskovSElemVecAvgFuncTests, kGtestValues, kFuncTestName);
+INSTANTIATE_TEST_SUITE_P(VectorAverageFuncTests, OtcheskovSElemVecAvgFuncTests, kGtestValues, kFuncTestName);
 
 
 }  // namespace

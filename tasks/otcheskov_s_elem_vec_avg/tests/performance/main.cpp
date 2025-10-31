@@ -8,19 +8,40 @@
 namespace otcheskov_s_elem_vec_avg {
 
 class OtcheskovSElemVecAvgPerfTests : public ppc::util::BaseRunPerfTests<InType, OutType> {
-  const int kVectorSize_ = 1000;
   InType input_data_{};
+  OutType expected_avg_;
 
   void SetUp() override {
-    input_data_.resize(kVectorSize_);
-    for (int i = 0; i < kVectorSize_; ++i) {
-      input_data_[i] = i + 1;
+    std::string filename = "test_vec_one_million_elems.txt";
+    expected_avg_ = -2.60988;
+
+    std::string abs_path = ppc::util::GetAbsoluteTaskPath(PPC_ID_otcheskov_s_elem_vec_avg, filename);
+    std::ifstream file(abs_path);
+    
+    if (!file.is_open()) {
+      throw std::runtime_error("Failed to open file: " + abs_path);
     }
+
+    int num;
+    while (file >> num) {
+      input_data_.push_back(num);
+    }
+    file.close();
+
+    // 2 000 000 elements
+    input_data_.insert(input_data_.end(), input_data_.begin(), input_data_.end());
+    // 4 000 000 elements
+    input_data_.insert(input_data_.end(), input_data_.begin(), input_data_.end());
+    // 8 000 000 elements
+    input_data_.insert(input_data_.end(), input_data_.begin(), input_data_.end());
+    // 16 000 000 elements
+    input_data_.insert(input_data_.end(), input_data_.begin(), input_data_.end());
+    // 32 000 000 elements
+    input_data_.insert(input_data_.end(), input_data_.begin(), input_data_.end());
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
-    double expected_avg = (kVectorSize_ + 1) / 2.0;
-    return expected_avg == output_data;
+    return std::fabs(expected_avg_ - output_data) < std::numeric_limits<double>::epsilon();
   }
 
   InType GetTestInputData() final {
@@ -28,7 +49,7 @@ class OtcheskovSElemVecAvgPerfTests : public ppc::util::BaseRunPerfTests<InType,
   }
 };
 
-TEST_P(OtcheskovSElemVecAvgPerfTests, RunPerfModes) {
+TEST_P(OtcheskovSElemVecAvgPerfTests, VectorAveragePerfTests) {
   ExecuteTest(GetParam());
 }
 
@@ -39,6 +60,6 @@ const auto kGtestValues = ppc::util::TupleToGTestValues(kAllPerfTasks);
 
 const auto kPerfTestName = OtcheskovSElemVecAvgPerfTests::CustomPerfTestName;
 
-INSTANTIATE_TEST_SUITE_P(RunModeTests, OtcheskovSElemVecAvgPerfTests, kGtestValues, kPerfTestName);
+INSTANTIATE_TEST_SUITE_P(VectorAveragePerfTests, OtcheskovSElemVecAvgPerfTests, kGtestValues, kPerfTestName);
 
 }  // namespace otcheskov_s_elem_vec_avg
