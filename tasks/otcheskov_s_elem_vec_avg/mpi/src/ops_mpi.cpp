@@ -39,21 +39,20 @@ bool OtcheskovSElemVecAvgMPI::RunImpl() {
 
   std::vector<int> displacements(ProcNum);
   std::vector<int> counts(ProcNum);
-  
+
   int offset = 0;
   for (int i = 0; i < ProcNum; i++) {
     counts[i] = local_size + (i < remainder ? 1 : 0);
     displacements[i] = offset;
     offset += counts[i];
-    
   }
-  MPI_Scatterv(GetInput().data(), counts.data(), displacements.data(), MPI_INT,
-               local_data.data(), proc_size, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Scatterv(GetInput().data(), counts.data(), displacements.data(), MPI_INT, local_data.data(), proc_size, MPI_INT,
+               0, MPI_COMM_WORLD);
   int local_sum = std::accumulate(local_data.begin(), local_data.end(), 0);
 
   int total_sum = 0;
   MPI_Allreduce(&local_sum, &total_sum, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-  GetOutput() =  total_sum / static_cast<double>(total_size);
+  GetOutput() = total_sum / static_cast<double>(total_size);
   return true;
 }
 

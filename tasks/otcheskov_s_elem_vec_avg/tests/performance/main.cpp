@@ -17,7 +17,7 @@ class OtcheskovSElemVecAvgPerfTests : public ppc::util::BaseRunPerfTests<InType,
 
     std::string abs_path = ppc::util::GetAbsoluteTaskPath(PPC_ID_otcheskov_s_elem_vec_avg, filename);
     std::ifstream file(abs_path);
-    
+
     if (!file.is_open()) {
       throw std::runtime_error("Failed to open file: " + abs_path);
     }
@@ -53,8 +53,8 @@ TEST_P(OtcheskovSElemVecAvgPerfTests, VectorAveragePerfTests) {
   ExecuteTest(GetParam());
 }
 
-const auto kAllPerfTasks =
-    ppc::util::MakeAllPerfTasks<InType, OtcheskovSElemVecAvgMPI, OtcheskovSElemVecAvgSEQ>(PPC_SETTINGS_otcheskov_s_elem_vec_avg);
+const auto kAllPerfTasks = ppc::util::MakeAllPerfTasks<InType, OtcheskovSElemVecAvgMPI, OtcheskovSElemVecAvgSEQ>(
+    PPC_SETTINGS_otcheskov_s_elem_vec_avg);
 
 const auto kGtestValues = ppc::util::TupleToGTestValues(kAllPerfTasks);
 

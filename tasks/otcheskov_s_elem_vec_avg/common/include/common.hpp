@@ -12,4 +12,4 @@ using OutType = double;
 using TestType = std::tuple<std::string, double>;
 using BaseTask = ppc::task::Task<InType, OutType>;
 
-}  // namespace otcheskov_s_elem_vec_av
+}  // namespace otcheskov_s_elem_vec_avg
