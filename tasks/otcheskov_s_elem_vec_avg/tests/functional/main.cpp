@@ -120,7 +120,7 @@ const std::array<TestType, 5> kTestParam = {
   std::make_tuple("test_vec2.txt", 14.5),
   std::make_tuple("test_vec_one_elem.txt", 5.0),
   std::make_tuple("test_vec_fraction.txt", 4.0/3.0),
-  std::make_tuple("test_vec_five_million_elems.txt", 3.250287)
+  std::make_tuple("test_vec_one_million_elems.txt", -2.60988)
 };
 
 const auto kTestTasksList =
