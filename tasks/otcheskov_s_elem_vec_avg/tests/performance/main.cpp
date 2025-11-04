@@ -1,9 +1,16 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <fstream>
+#include <limits>
+#include <stdexcept>
+#include <string>
+
 #include "otcheskov_s_elem_vec_avg/common/include/common.hpp"
 #include "otcheskov_s_elem_vec_avg/mpi/include/ops_mpi.hpp"
 #include "otcheskov_s_elem_vec_avg/seq/include/ops_seq.hpp"
 #include "util/include/perf_test_util.hpp"
+#include "util/include/util.hpp"
 
 namespace otcheskov_s_elem_vec_avg {
 
@@ -22,7 +29,7 @@ class OtcheskovSElemVecAvgPerfTests : public ppc::util::BaseRunPerfTests<InType,
       throw std::runtime_error("Failed to open file: " + abs_path);
     }
 
-    int num;
+    int num{};
     while (file >> num) {
       input_data_.push_back(num);
     }

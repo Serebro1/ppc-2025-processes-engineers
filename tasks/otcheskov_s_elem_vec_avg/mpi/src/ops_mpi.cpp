@@ -2,8 +2,7 @@
 
 #include <mpi.h>
 
-#include <numeric>
-#include <vector>
+#include <cmath>
 
 #include "otcheskov_s_elem_vec_avg/common/include/common.hpp"
 #include "util/include/util.hpp"
@@ -21,43 +20,35 @@ bool OtcheskovSElemVecAvgMPI::ValidationImpl() {
 }
 
 bool OtcheskovSElemVecAvgMPI::PreProcessingImpl() {
-  GetOutput() = 0.0;
-  return true;
+  return (!GetInput().empty() && std::isnan(GetOutput()));
 }
 
 bool OtcheskovSElemVecAvgMPI::RunImpl() {
-  int ProcRank, ProcNum;
-  MPI_Comm_rank(MPI_COMM_WORLD, &ProcRank);
-  MPI_Comm_size(MPI_COMM_WORLD, &ProcNum);
-
-  int total_size = GetInput().size();
-  int local_size = total_size / ProcNum;
-  int remainder = total_size % ProcNum;
-
-  int proc_size = local_size + (ProcRank < remainder ? 1 : 0);
-  std::vector<int> local_data(proc_size);
-
-  std::vector<int> displacements(ProcNum);
-  std::vector<int> counts(ProcNum);
-
-  int offset = 0;
-  for (int i = 0; i < ProcNum; i++) {
-    counts[i] = local_size + (i < remainder ? 1 : 0);
-    displacements[i] = offset;
-    offset += counts[i];
+  if (GetInput().empty() || !std::isnan(GetOutput())) {
+    return false;
   }
-  MPI_Scatterv(GetInput().data(), counts.data(), displacements.data(), MPI_INT, local_data.data(), proc_size, MPI_INT,
-               0, MPI_COMM_WORLD);
-  int local_sum = std::accumulate(local_data.begin(), local_data.end(), 0);
 
+  int proc_rank{};
+  int proc_num{};
+  MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &proc_num);
+
+  const int total_size = GetInput().size();
+  const int batch_size = total_size / proc_num;
+  const int proc_size = batch_size + (proc_rank == proc_num - 1 ? total_size % proc_num : 0);
+
+  auto start_local_data = GetInput().begin() + (proc_rank * batch_size);
+  auto end_local_data = start_local_data + proc_size;
+
+  int local_sum = std::accumulate(start_local_data, end_local_data, 0);
   int total_sum = 0;
   MPI_Allreduce(&local_sum, &total_sum, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
   GetOutput() = total_sum / static_cast<double>(total_size);
-  return true;
+  return !std::isnan(GetOutput());
 }
 
 bool OtcheskovSElemVecAvgMPI::PostProcessingImpl() {
-  return true;
+  return (!GetInput().empty() && !std::isnan(GetOutput()));
 }
 
 }  // namespace otcheskov_s_elem_vec_avg

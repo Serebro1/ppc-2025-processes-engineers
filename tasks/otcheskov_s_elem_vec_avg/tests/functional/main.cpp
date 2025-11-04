@@ -1,16 +1,17 @@
 #include <gtest/gtest.h>
 #include <stb/stb_image.h>
 
-#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
-#include <cstdint>
-#include <numeric>
+#include <fstream>
+#include <iomanip>
+#include <ios>
+#include <limits>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <tuple>
-#include <utility>
-#include <vector>
 
 #include "otcheskov_s_elem_vec_avg/common/include/common.hpp"
 #include "otcheskov_s_elem_vec_avg/mpi/include/ops_mpi.hpp"
@@ -41,7 +42,7 @@ class OtcheskovSElemVecAvgFuncTests : public ppc::util::BaseRunFuncTests<InType,
       throw std::runtime_error("Failed to open file: " + abs_path);
     }
 
-    int num;
+    int num{};
     while (file >> num) {
       input_data_.push_back(num);
     }
@@ -107,19 +108,17 @@ class OtcheskovSElemVecAvgFuncTests : public ppc::util::BaseRunFuncTests<InType,
 
 namespace {
 
-TEST(Some_test, test) {
-  auto task = ppc::task::TaskGetter<OtcheskovSElemVecAvgSEQ, std::vector<int>>({});
-  EXPECT_FALSE(task->Validation());
-}
-
 TEST_P(OtcheskovSElemVecAvgFuncTests, VectorAverageFuncTests) {
   ExecuteTest(GetParam());
 }
 
-const std::array<TestType, 5> kTestParam = {
-    std::make_tuple("test_vec1.txt", 50.5), std::make_tuple("test_vec2.txt", 14.5),
-    std::make_tuple("test_vec_one_elem.txt", 5.0), std::make_tuple("test_vec_fraction.txt", 4.0 / 3.0),
-    std::make_tuple("test_vec_one_million_elems.txt", -2.60988)};
+const std::array<TestType, 7> kTestParam = {std::make_tuple("test_vec1.txt", 50.5),
+                                            std::make_tuple("test_vec2.txt", 14.5),
+                                            std::make_tuple("test_vec_one_elem.txt", 5.0),
+                                            std::make_tuple("test_vec_fraction.txt", 4.0 / 3.0),
+                                            std::make_tuple("test_vec_one_million_elems.txt", -2.60988),
+                                            std::make_tuple("test_vec_alternating_elems.txt", 0.0),
+                                            std::make_tuple("test_vec_zeros_elems.txt", 0.0)};
 
 const auto kTestTasksList = std::tuple_cat(
     ppc::util::AddFuncTask<OtcheskovSElemVecAvgMPI, InType>(kTestParam, PPC_SETTINGS_otcheskov_s_elem_vec_avg),
@@ -130,6 +129,69 @@ const auto kGtestValues = ppc::util::ExpandToValues(kTestTasksList);
 const auto kFuncTestName = OtcheskovSElemVecAvgFuncTests::PrintFuncTestName<OtcheskovSElemVecAvgFuncTests>;
 
 INSTANTIATE_TEST_SUITE_P(VectorAverageFuncTests, OtcheskovSElemVecAvgFuncTests, kGtestValues, kFuncTestName);
+
+// simple tests for sequential task
+TEST(OtcheskovSElemVecAvgFuncTests, EmptyVectorSEQ) {
+  InType vec;
+  auto task_seq = ppc::task::TaskGetter<OtcheskovSElemVecAvgSEQ, InType>(vec);
+  EXPECT_FALSE(task_seq->Validation());
+  EXPECT_FALSE(task_seq->PreProcessing());
+  EXPECT_FALSE(task_seq->Run());
+  EXPECT_FALSE(task_seq->PostProcessing());
+}
+
+TEST(OtcheskovSElemVecAvgFuncTests, ChangedOutputBeforeRunSEQ) {
+  InType vec = {1, 1, 1, 1, 1, 1};
+  auto task_seq = ppc::task::TaskGetter<OtcheskovSElemVecAvgSEQ, InType>(vec);
+  task_seq->GetOutput() = 1.0;
+  EXPECT_FALSE(task_seq->Validation());
+  EXPECT_FALSE(task_seq->PreProcessing());
+  EXPECT_FALSE(task_seq->Run());
+  task_seq->PostProcessing();
+}
+
+TEST(OtcheskovSElemVecAvgFuncTests, ChangedOutputAfterRunSEQ) {
+  InType vec = {1, 1, 1, 1, 1, 1};
+  auto task_seq = ppc::task::TaskGetter<OtcheskovSElemVecAvgSEQ, InType>(vec);
+
+  EXPECT_TRUE(task_seq->Validation());
+  EXPECT_TRUE(task_seq->PreProcessing());
+  EXPECT_TRUE(task_seq->Run());
+  task_seq->GetOutput() = NAN;
+  // How to compare computed result in run with changed result?
+  EXPECT_FALSE(task_seq->PostProcessing());
+}
+
+// simple tests for mpi task
+TEST(OtcheskovSElemVecAvgFuncTests, EmptyVectorMPI) {
+  InType vec;
+  auto task_seq = ppc::task::TaskGetter<OtcheskovSElemVecAvgMPI, InType>(vec);
+  EXPECT_FALSE(task_seq->Validation());
+  EXPECT_FALSE(task_seq->PreProcessing());
+  EXPECT_FALSE(task_seq->Run());
+  EXPECT_FALSE(task_seq->PostProcessing());
+}
+
+TEST(OtcheskovSElemVecAvgFuncTests, ChangedOutputBeforeRunMPI) {
+  InType vec = {1, 1, 1, 1, 1, 1};
+  auto task_seq = ppc::task::TaskGetter<OtcheskovSElemVecAvgMPI, InType>(vec);
+  task_seq->GetOutput() = 1.0;
+  EXPECT_FALSE(task_seq->Validation());
+  EXPECT_FALSE(task_seq->PreProcessing());
+  EXPECT_FALSE(task_seq->Run());
+  task_seq->PostProcessing();
+}
+
+TEST(OtcheskovSElemVecAvgFuncTests, ChangedOutputAfterRunMPI) {
+  InType vec = {1, 1, 1, 1, 1, 1};
+  auto task_seq = ppc::task::TaskGetter<OtcheskovSElemVecAvgMPI, InType>(vec);
+  EXPECT_TRUE(task_seq->Validation());
+  EXPECT_TRUE(task_seq->PreProcessing());
+  EXPECT_TRUE(task_seq->Run());
+  task_seq->GetOutput() = NAN;
+  // How to compare computed result in run with changed result?
+  EXPECT_FALSE(task_seq->PostProcessing());
+}
 
 }  // namespace
 
