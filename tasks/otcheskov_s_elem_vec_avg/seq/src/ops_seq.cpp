@@ -1,9 +1,9 @@
 #include "otcheskov_s_elem_vec_avg/seq/include/ops_seq.hpp"
 
 #include <cmath>
+#include <numeric>
 
 #include "otcheskov_s_elem_vec_avg/common/include/common.hpp"
-#include "util/include/util.hpp"
 
 namespace otcheskov_s_elem_vec_avg {
 

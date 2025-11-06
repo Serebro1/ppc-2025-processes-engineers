@@ -2,6 +2,7 @@
 #include <stb/stb_image.h>
 
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <fstream>
@@ -16,6 +17,7 @@
 #include "otcheskov_s_elem_vec_avg/common/include/common.hpp"
 #include "otcheskov_s_elem_vec_avg/mpi/include/ops_mpi.hpp"
 #include "otcheskov_s_elem_vec_avg/seq/include/ops_seq.hpp"
+#include "task/include/task.hpp"
 #include "util/include/func_test_util.hpp"
 #include "util/include/util.hpp"
 
@@ -62,7 +64,7 @@ class OtcheskovSElemVecAvgFuncTests : public ppc::util::BaseRunFuncTests<InType,
   OutType expected_avg_;
 
   static std::string FormatFileName(const std::string &filename) {
-    size_t lastindex = filename.find_last_of(".");
+    size_t lastindex = filename.find_last_of('.');
     std::string name = filename;
     if (lastindex != std::string::npos) {
       name = filename.substr(0, lastindex);
@@ -70,7 +72,7 @@ class OtcheskovSElemVecAvgFuncTests : public ppc::util::BaseRunFuncTests<InType,
 
     std::string format_name = name;
     for (char &c : format_name) {
-      if (!std::isalnum(c) && c != '_') {
+      if (std::isalnum(c) == 0 && c != '_') {
         c = '_';
       }
     }

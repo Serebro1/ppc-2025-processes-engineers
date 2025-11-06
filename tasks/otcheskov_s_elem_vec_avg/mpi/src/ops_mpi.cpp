@@ -3,9 +3,11 @@
 #include <mpi.h>
 
 #include <cmath>
+#include <cstddef>
+#include <numeric>
+#include <vector>
 
 #include "otcheskov_s_elem_vec_avg/common/include/common.hpp"
-#include "util/include/util.hpp"
 
 namespace otcheskov_s_elem_vec_avg {
 
@@ -33,12 +35,12 @@ bool OtcheskovSElemVecAvgMPI::RunImpl() {
   MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &proc_num);
 
-  const int total_size = GetInput().size();
-  const int batch_size = total_size / proc_num;
-  const int proc_size = batch_size + (proc_rank == proc_num - 1 ? total_size % proc_num : 0);
+  const size_t total_size = GetInput().size();
+  const size_t batch_size = total_size / proc_num;
+  const size_t proc_size = batch_size + (proc_rank == proc_num - 1 ? total_size % proc_num : 0);
 
-  auto start_local_data = GetInput().begin() + (proc_rank * batch_size);
-  auto end_local_data = start_local_data + proc_size;
+  auto start_local_data = GetInput().begin() + static_cast<std::vector<int>::difference_type>(proc_rank * batch_size);
+  auto end_local_data = start_local_data + static_cast<std::vector<int>::difference_type>(proc_size);
 
   int local_sum = std::accumulate(start_local_data, end_local_data, 0);
   int total_sum = 0;

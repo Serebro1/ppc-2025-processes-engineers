@@ -15,7 +15,7 @@
 namespace otcheskov_s_elem_vec_avg {
 
 class OtcheskovSElemVecAvgPerfTests : public ppc::util::BaseRunPerfTests<InType, OutType> {
-  InType input_data_{};
+  InType input_data_;
   OutType expected_avg_;
 
   void SetUp() override {
