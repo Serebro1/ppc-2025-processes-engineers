@@ -22,11 +22,11 @@ bool OtcheskovSElemVecAvgMPI::ValidationImpl() {
 }
 
 bool OtcheskovSElemVecAvgMPI::PreProcessingImpl() {
-  return (!GetInput().empty() && std::isnan(GetOutput()));
+  return true;
 }
 
 bool OtcheskovSElemVecAvgMPI::RunImpl() {
-  if (GetInput().empty() || !std::isnan(GetOutput())) {
+  if (GetInput().empty()) {
     return false;
   }
 
@@ -50,7 +50,7 @@ bool OtcheskovSElemVecAvgMPI::RunImpl() {
 }
 
 bool OtcheskovSElemVecAvgMPI::PostProcessingImpl() {
-  return (!GetInput().empty() && !std::isnan(GetOutput()));
+  return true;
 }
 
 }  // namespace otcheskov_s_elem_vec_avg

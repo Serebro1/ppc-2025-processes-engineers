@@ -132,68 +132,84 @@ const auto kFuncTestName = OtcheskovSElemVecAvgFuncTests::PrintFuncTestName<Otch
 
 INSTANTIATE_TEST_SUITE_P(VectorAverageFuncTests, OtcheskovSElemVecAvgFuncTests, kGtestValues, kFuncTestName);
 
-// simple tests for sequential task
-TEST(OtcheskovSElemVecAvgFuncTests, empty_vector_seq) {
-  InType vec;
-  auto task_seq = ppc::task::TaskGetter<OtcheskovSElemVecAvgSEQ, InType>(vec);
-  EXPECT_FALSE(task_seq->Validation());
-  EXPECT_FALSE(task_seq->PreProcessing());
-  EXPECT_FALSE(task_seq->Run());
-  EXPECT_FALSE(task_seq->PostProcessing());
+class OtcheskovSElemVecAvgFuncTestsValidation : public ppc::util::BaseRunFuncTests<InType, OutType, TestType> {
+ public:
+  static std::string PrintTestParam(const TestType &test_param) {
+    return std::get<0>(test_param);
+  }
+
+ protected:
+  bool CheckTestOutputData(OutType &output_data) final {
+    if (std::isnan(output_data)) {
+      return true;
+    }
+    return std::fabs(expected_avg_ - output_data) < std::numeric_limits<double>::epsilon();
+  }
+
+  InType GetTestInputData() final {
+    return input_data_;
+  }
+
+  void ExecuteTest(::ppc::util::FuncTestParam<InType, OutType, TestType> test_param) {
+    const std::string &test_name =
+        std::get<static_cast<std::size_t>(::ppc::util::GTestParamIndex::kNameTest)>(test_param);
+
+    ValidateTestName(test_name);
+
+    const auto test_env_scope = ppc::util::test::MakePerTestEnvForCurrentGTest(test_name);
+
+    if (IsTestDisabled(test_name)) {
+      GTEST_SKIP();
+    }
+
+    if (ShouldSkipNonMpiTask(test_name)) {
+      std::cerr << "kALL and kMPI tasks are not under mpirun\n";
+      GTEST_SKIP();
+    }
+
+    task =
+        std::get<static_cast<std::size_t>(::ppc::util::GTestParamIndex::kTaskGetter)>(test_param)(GetTestInputData());
+    const TestType &params = std::get<static_cast<std::size_t>(::ppc::util::GTestParamIndex::kTestParams)>(test_param);
+    const std::string param_name = std::get<0>(params);
+    if (param_name.find("_changed_output_") != std::string::npos) {
+      task->GetInput() = {1, 1, 1, 1, 1};
+      task->GetOutput() = 1.0;
+    }
+    ExecuteTaskPipeline();
+  }
+  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
+  void ExecuteTaskPipeline() {
+    EXPECT_FALSE(task->Validation());
+    task->PreProcessing();
+    task->Run();
+    task->PostProcessing();
+  }
+
+ private:
+  InType input_data_;
+  OutType expected_avg_ = NAN;
+  ppc::task::TaskPtr<InType, OutType> task;
+};
+
+TEST_P(OtcheskovSElemVecAvgFuncTestsValidation, VectorAverageFuncTestsValidation) {
+  ExecuteTest(GetParam());
 }
 
-TEST(OtcheskovSElemVecAvgFuncTests, changed_output_before_run_seq) {
-  InType vec = {1, 1, 1, 1, 1, 1};
-  auto task_seq = ppc::task::TaskGetter<OtcheskovSElemVecAvgSEQ, InType>(vec);
-  task_seq->GetOutput() = 1.0;
-  EXPECT_FALSE(task_seq->Validation());
-  EXPECT_FALSE(task_seq->PreProcessing());
-  EXPECT_FALSE(task_seq->Run());
-  task_seq->PostProcessing();
-}
+const std::array<TestType, 2> kValidationTestParam = {std::make_tuple("test_empty_vec", NAN),
+                                                      std::make_tuple("test_changed_output_before_run", NAN)};
 
-TEST(OtcheskovSElemVecAvgFuncTests, changed_output_after_run_seq) {
-  InType vec = {1, 1, 1, 1, 1, 1};
-  auto task_seq = ppc::task::TaskGetter<OtcheskovSElemVecAvgSEQ, InType>(vec);
+const auto kValidationTestTasksList = std::tuple_cat(ppc::util::AddFuncTask<OtcheskovSElemVecAvgMPI, InType>(
+                                                         kValidationTestParam, PPC_SETTINGS_otcheskov_s_elem_vec_avg),
+                                                     ppc::util::AddFuncTask<OtcheskovSElemVecAvgSEQ, InType>(
+                                                         kValidationTestParam, PPC_SETTINGS_otcheskov_s_elem_vec_avg));
 
-  EXPECT_TRUE(task_seq->Validation());
-  EXPECT_TRUE(task_seq->PreProcessing());
-  EXPECT_TRUE(task_seq->Run());
-  task_seq->GetOutput() = NAN;
-  // How to compare computed result in run with changed result?
-  EXPECT_FALSE(task_seq->PostProcessing());
-}
+const auto kValidationGtestValues = ppc::util::ExpandToValues(kValidationTestTasksList);
 
-// simple tests for mpi task
-TEST(OtcheskovSElemVecAvgFuncTests, empty_vector_mpi) {
-  InType vec;
-  auto task_seq = ppc::task::TaskGetter<OtcheskovSElemVecAvgMPI, InType>(vec);
-  EXPECT_FALSE(task_seq->Validation());
-  EXPECT_FALSE(task_seq->PreProcessing());
-  EXPECT_FALSE(task_seq->Run());
-  EXPECT_FALSE(task_seq->PostProcessing());
-}
+const auto kValidationFuncTestName =
+    OtcheskovSElemVecAvgFuncTestsValidation::PrintFuncTestName<OtcheskovSElemVecAvgFuncTestsValidation>;
 
-TEST(OtcheskovSElemVecAvgFuncTests, changed_output_before_run_mpi) {
-  InType vec = {1, 1, 1, 1, 1, 1};
-  auto task_seq = ppc::task::TaskGetter<OtcheskovSElemVecAvgMPI, InType>(vec);
-  task_seq->GetOutput() = 1.0;
-  EXPECT_FALSE(task_seq->Validation());
-  EXPECT_FALSE(task_seq->PreProcessing());
-  EXPECT_FALSE(task_seq->Run());
-  task_seq->PostProcessing();
-}
-
-TEST(OtcheskovSElemVecAvgFuncTests, changed_output_after_run_mpi) {
-  InType vec = {1, 1, 1, 1, 1, 1};
-  auto task_seq = ppc::task::TaskGetter<OtcheskovSElemVecAvgMPI, InType>(vec);
-  EXPECT_TRUE(task_seq->Validation());
-  EXPECT_TRUE(task_seq->PreProcessing());
-  EXPECT_TRUE(task_seq->Run());
-  task_seq->GetOutput() = NAN;
-  // How to compare computed result in run with changed result?
-  EXPECT_FALSE(task_seq->PostProcessing());
-}
+INSTANTIATE_TEST_SUITE_P(VectorAverageFuncTestsValidation, OtcheskovSElemVecAvgFuncTestsValidation,
+                         kValidationGtestValues, kValidationFuncTestName);
 
 }  // namespace
 

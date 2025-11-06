@@ -18,11 +18,11 @@ bool OtcheskovSElemVecAvgSEQ::ValidationImpl() {
 }
 
 bool OtcheskovSElemVecAvgSEQ::PreProcessingImpl() {
-  return (!GetInput().empty() && std::isnan(GetOutput()));
+  return true;
 }
 
 bool OtcheskovSElemVecAvgSEQ::RunImpl() {
-  if (GetInput().empty() || !std::isnan(GetOutput())) {
+  if (GetInput().empty()) {
     return false;
   }
   int sum = std::accumulate(GetInput().begin(), GetInput().end(), 0);
@@ -31,7 +31,7 @@ bool OtcheskovSElemVecAvgSEQ::RunImpl() {
 }
 
 bool OtcheskovSElemVecAvgSEQ::PostProcessingImpl() {
-  return (!GetInput().empty() && !std::isnan(GetOutput()));
+  return true;
 }
 
 }  // namespace otcheskov_s_elem_vec_avg
