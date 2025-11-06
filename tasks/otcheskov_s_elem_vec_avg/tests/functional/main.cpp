@@ -133,7 +133,7 @@ const auto kFuncTestName = OtcheskovSElemVecAvgFuncTests::PrintFuncTestName<Otch
 INSTANTIATE_TEST_SUITE_P(VectorAverageFuncTests, OtcheskovSElemVecAvgFuncTests, kGtestValues, kFuncTestName);
 
 // simple tests for sequential task
-TEST(OtcheskovSElemVecAvgFuncTests, EmptyVectorSEQ) {
+TEST(OtcheskovSElemVecAvgFuncTests, empty_vector_seq) {
   InType vec;
   auto task_seq = ppc::task::TaskGetter<OtcheskovSElemVecAvgSEQ, InType>(vec);
   EXPECT_FALSE(task_seq->Validation());
@@ -142,7 +142,7 @@ TEST(OtcheskovSElemVecAvgFuncTests, EmptyVectorSEQ) {
   EXPECT_FALSE(task_seq->PostProcessing());
 }
 
-TEST(OtcheskovSElemVecAvgFuncTests, ChangedOutputBeforeRunSEQ) {
+TEST(OtcheskovSElemVecAvgFuncTests, changed_output_before_run_seq) {
   InType vec = {1, 1, 1, 1, 1, 1};
   auto task_seq = ppc::task::TaskGetter<OtcheskovSElemVecAvgSEQ, InType>(vec);
   task_seq->GetOutput() = 1.0;
@@ -152,7 +152,7 @@ TEST(OtcheskovSElemVecAvgFuncTests, ChangedOutputBeforeRunSEQ) {
   task_seq->PostProcessing();
 }
 
-TEST(OtcheskovSElemVecAvgFuncTests, ChangedOutputAfterRunSEQ) {
+TEST(OtcheskovSElemVecAvgFuncTests, changed_output_after_run_seq) {
   InType vec = {1, 1, 1, 1, 1, 1};
   auto task_seq = ppc::task::TaskGetter<OtcheskovSElemVecAvgSEQ, InType>(vec);
 
@@ -165,7 +165,7 @@ TEST(OtcheskovSElemVecAvgFuncTests, ChangedOutputAfterRunSEQ) {
 }
 
 // simple tests for mpi task
-TEST(OtcheskovSElemVecAvgFuncTests, EmptyVectorMPI) {
+TEST(OtcheskovSElemVecAvgFuncTests, empty_vector_mpi) {
   InType vec;
   auto task_seq = ppc::task::TaskGetter<OtcheskovSElemVecAvgMPI, InType>(vec);
   EXPECT_FALSE(task_seq->Validation());
@@ -174,7 +174,7 @@ TEST(OtcheskovSElemVecAvgFuncTests, EmptyVectorMPI) {
   EXPECT_FALSE(task_seq->PostProcessing());
 }
 
-TEST(OtcheskovSElemVecAvgFuncTests, ChangedOutputBeforeRunMPI) {
+TEST(OtcheskovSElemVecAvgFuncTests, changed_output_before_run_mpi) {
   InType vec = {1, 1, 1, 1, 1, 1};
   auto task_seq = ppc::task::TaskGetter<OtcheskovSElemVecAvgMPI, InType>(vec);
   task_seq->GetOutput() = 1.0;
@@ -184,7 +184,7 @@ TEST(OtcheskovSElemVecAvgFuncTests, ChangedOutputBeforeRunMPI) {
   task_seq->PostProcessing();
 }
 
-TEST(OtcheskovSElemVecAvgFuncTests, ChangedOutputAfterRunMPI) {
+TEST(OtcheskovSElemVecAvgFuncTests, changed_output_after_run_mpi) {
   InType vec = {1, 1, 1, 1, 1, 1};
   auto task_seq = ppc::task::TaskGetter<OtcheskovSElemVecAvgMPI, InType>(vec);
   EXPECT_TRUE(task_seq->Validation());
