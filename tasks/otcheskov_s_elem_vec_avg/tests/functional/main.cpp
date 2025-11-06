@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iomanip>
 #include <ios>
+#include <iostream>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
@@ -167,28 +168,28 @@ class OtcheskovSElemVecAvgFuncTestsValidation : public ppc::util::BaseRunFuncTes
       GTEST_SKIP();
     }
 
-    task =
+    task_ =
         std::get<static_cast<std::size_t>(::ppc::util::GTestParamIndex::kTaskGetter)>(test_param)(GetTestInputData());
     const TestType &params = std::get<static_cast<std::size_t>(::ppc::util::GTestParamIndex::kTestParams)>(test_param);
     const std::string param_name = std::get<0>(params);
     if (param_name.find("_changed_output_") != std::string::npos) {
-      task->GetInput() = {1, 1, 1, 1, 1};
-      task->GetOutput() = 1.0;
+      task_->GetInput() = {1, 1, 1, 1, 1};
+      task_->GetOutput() = 1.0;
     }
     ExecuteTaskPipeline();
   }
   // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   void ExecuteTaskPipeline() {
-    EXPECT_FALSE(task->Validation());
-    task->PreProcessing();
-    task->Run();
-    task->PostProcessing();
+    EXPECT_FALSE(task_->Validation());
+    task_->PreProcessing();
+    task_->Run();
+    task_->PostProcessing();
   }
 
  private:
   InType input_data_;
   OutType expected_avg_ = NAN;
-  ppc::task::TaskPtr<InType, OutType> task;
+  ppc::task::TaskPtr<InType, OutType> task_;
 };
 
 TEST_P(OtcheskovSElemVecAvgFuncTestsValidation, VectorAverageFuncTestsValidation) {
