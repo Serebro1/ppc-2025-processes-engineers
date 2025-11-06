@@ -16,7 +16,7 @@ namespace otcheskov_s_elem_vec_avg {
 
 class OtcheskovSElemVecAvgPerfTests : public ppc::util::BaseRunPerfTests<InType, OutType> {
   InType input_data_;
-  OutType expected_avg_;
+  OutType expected_avg_ = NAN;
 
   void SetUp() override {
     std::string filename = "test_vec_one_million_elems.txt";

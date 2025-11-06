@@ -61,7 +61,7 @@ class OtcheskovSElemVecAvgFuncTests : public ppc::util::BaseRunFuncTests<InType,
 
  private:
   InType input_data_;
-  OutType expected_avg_;
+  OutType expected_avg_ = NAN;
 
   static std::string FormatFileName(const std::string &filename) {
     size_t lastindex = filename.find_last_of('.');
