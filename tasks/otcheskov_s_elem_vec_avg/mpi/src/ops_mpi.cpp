@@ -36,6 +36,7 @@ bool OtcheskovSElemVecAvgMPI::RunImpl() {
   MPI_Comm_size(MPI_COMM_WORLD, &proc_num);
 
   const size_t total_size = GetInput().size();
+  const double inv_total = 1.0 / total_size;
   const size_t batch_size = total_size / proc_num;
   const size_t proc_size = batch_size + (proc_rank == proc_num - 1 ? total_size % proc_num : 0);
 
@@ -44,8 +45,10 @@ bool OtcheskovSElemVecAvgMPI::RunImpl() {
 
   int local_sum = std::accumulate(start_local_data, end_local_data, 0);
   int total_sum = 0;
-  MPI_Allreduce(&local_sum, &total_sum, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-  GetOutput() = total_sum / static_cast<double>(total_size);
+  MPI_Request request;
+  MPI_Iallreduce(&local_sum, &total_sum, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD, &request);
+  MPI_Wait(&request, MPI_STATUS_IGNORE);
+  GetOutput() = total_sum * inv_total;
   return !std::isnan(GetOutput());
 }
 
