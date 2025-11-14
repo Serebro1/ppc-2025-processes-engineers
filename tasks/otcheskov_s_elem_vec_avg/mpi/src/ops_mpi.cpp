@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <numeric>
 #include <vector>
 
@@ -38,16 +39,13 @@ bool OtcheskovSElemVecAvgMPI::RunImpl() {
   const size_t total_size = GetInput().size();
   const size_t batch_size = total_size / proc_num;
   const size_t proc_size = batch_size + (proc_rank == proc_num - 1 ? total_size % proc_num : 0);
-
   auto start_local_data = GetInput().begin() + static_cast<std::vector<int>::difference_type>(proc_rank * batch_size);
   auto end_local_data = start_local_data + static_cast<std::vector<int>::difference_type>(proc_size);
 
-  int local_sum = std::accumulate(start_local_data, end_local_data, 0);
-  int total_sum = 0;
-  MPI_Request request = MPI_REQUEST_NULL;
-  MPI_Iallreduce(&local_sum, &total_sum, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD, &request);
-  MPI_Wait(&request, MPI_STATUS_IGNORE);
-  GetOutput() = total_sum / static_cast<double>(total_size);
+  int64_t local_sum = std::reduce(start_local_data, end_local_data, static_cast<int64_t>(0));
+  int64_t total_sum = 0;
+  MPI_Allreduce(&local_sum, &total_sum, 1, MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD);
+  GetOutput() = static_cast<double>(total_sum) / static_cast<double>(total_size);
   return !std::isnan(GetOutput());
 }
 
