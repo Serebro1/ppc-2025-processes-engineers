@@ -68,8 +68,7 @@ class NesterovARunFuncTestsThreads : public ppc::util::BaseRunFuncTests<InType, 
 
 namespace {
 
-// TODO(allnes): Fix & enable back this test
-TEST_P(NesterovARunFuncTestsThreads, DISABLED_MatmulFromPic) {
+TEST_P(NesterovARunFuncTestsThreads, MatmulFromPic) {
   ExecuteTest(GetParam());
 }
 
