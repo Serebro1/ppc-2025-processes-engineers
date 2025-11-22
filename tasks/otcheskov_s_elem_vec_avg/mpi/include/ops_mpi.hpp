@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include "otcheskov_s_elem_vec_avg/common/include/common.hpp"
 #include "task/include/task.hpp"
 namespace otcheskov_s_elem_vec_avg {
@@ -17,8 +19,8 @@ class OtcheskovSElemVecAvgMPI : public BaseTask {
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
-  int proc_rank_;
-  int proc_num_;
+  int proc_rank_{};
+  int proc_num_{};
   std::vector<int> local_data_;
   std::vector<int> displacements_;
   std::vector<int> counts_;

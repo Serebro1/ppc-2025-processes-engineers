@@ -62,7 +62,6 @@ bool OtcheskovSElemVecAvgMPI::RunImpl() {
       offset += counts_[i];
     }
   }
-
   MPI_Bcast(counts_.data(), proc_num_, MPI_INT, 0, MPI_COMM_WORLD);
   MPI_Bcast(displacements_.data(), proc_num_, MPI_INT, 0, MPI_COMM_WORLD);
 
