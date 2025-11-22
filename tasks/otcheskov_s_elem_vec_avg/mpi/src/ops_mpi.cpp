@@ -3,7 +3,6 @@
 #include <mpi.h>
 
 #include <cmath>
-#include <cstddef>
 #include <cstdint>
 #include <numeric>
 #include <vector>
@@ -13,13 +12,22 @@
 namespace otcheskov_s_elem_vec_avg {
 
 OtcheskovSElemVecAvgMPI::OtcheskovSElemVecAvgMPI(const InType &in) {
+  MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank_);
+  MPI_Comm_size(MPI_COMM_WORLD, &proc_num_);
   SetTypeOfTask(GetStaticTypeOfTask());
-  GetInput() = in;
+  if (proc_rank_ == 0) {
+    GetInput() = in;
+  }
   GetOutput() = NAN;
 }
 
 bool OtcheskovSElemVecAvgMPI::ValidationImpl() {
-  return (!GetInput().empty() && std::isnan(GetOutput()));
+  bool is_valid = true;
+  if (proc_rank_ == 0) {
+    is_valid = !GetInput().empty() && std::isnan(GetOutput());
+  }
+  MPI_Bcast(&is_valid, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD);
+  return is_valid;
 }
 
 bool OtcheskovSElemVecAvgMPI::PreProcessingImpl() {
@@ -27,22 +35,39 @@ bool OtcheskovSElemVecAvgMPI::PreProcessingImpl() {
 }
 
 bool OtcheskovSElemVecAvgMPI::RunImpl() {
-  if (GetInput().empty()) {
+  int total_size = 0;
+  if (proc_rank_ == 0) {
+    total_size = static_cast<int>(GetInput().size());
+  }
+
+  MPI_Bcast(&total_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+  if (total_size == 0) {
     return false;
   }
 
-  int proc_rank{};
-  int proc_num{};
-  MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &proc_num);
+  int local_size = total_size / proc_num_;
+  int remainder = total_size % proc_num_;
+  int proc_size = local_size + (proc_rank_ < remainder ? 1 : 0);
 
-  const size_t total_size = GetInput().size();
-  const size_t batch_size = total_size / proc_num;
-  const size_t proc_size = batch_size + (proc_rank == proc_num - 1 ? total_size % proc_num : 0);
-  auto start_local_data = GetInput().begin() + static_cast<std::vector<int>::difference_type>(proc_rank * batch_size);
-  auto end_local_data = start_local_data + static_cast<std::vector<int>::difference_type>(proc_size);
+  local_data_.resize(proc_size);
+  counts_.resize(proc_num_);
+  displacements_.resize(proc_num_);
 
-  int64_t local_sum = std::reduce(start_local_data, end_local_data, static_cast<int64_t>(0));
+  int offset = 0;
+  for (int i = 0; i < proc_num_; i++) {
+    counts_[i] = local_size + (i < remainder ? 1 : 0);
+    displacements_[i] = offset;
+    offset += counts_[i];
+  }
+
+  MPI_Bcast(counts_.data(), proc_num_, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Bcast(displacements_.data(), proc_num_, MPI_INT, 0, MPI_COMM_WORLD);
+
+  MPI_Scatterv(GetInput().data(), counts_.data(), displacements_.data(), MPI_INT, local_data_.data(), proc_size,
+               MPI_INT, 0, MPI_COMM_WORLD);
+
+  int64_t local_sum = std::reduce(local_data_.begin(), local_data_.end(), static_cast<int64_t>(0));
   int64_t total_sum = 0;
   MPI_Allreduce(&local_sum, &total_sum, 1, MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD);
   GetOutput() = static_cast<double>(total_sum) / static_cast<double>(total_size);
