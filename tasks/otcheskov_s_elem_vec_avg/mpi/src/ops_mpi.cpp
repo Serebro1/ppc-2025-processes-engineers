@@ -54,11 +54,13 @@ bool OtcheskovSElemVecAvgMPI::RunImpl() {
   counts_.resize(proc_num_);
   displacements_.resize(proc_num_);
 
-  int offset = 0;
-  for (int i = 0; i < proc_num_; i++) {
-    counts_[i] = local_size + (i < remainder ? 1 : 0);
-    displacements_[i] = offset;
-    offset += counts_[i];
+  if (proc_rank_ == 0) {
+    int offset = 0;
+    for (int i = 0; i < proc_num_; i++) {
+      counts_[i] = local_size + (i < remainder ? 1 : 0);
+      displacements_[i] = offset;
+      offset += counts_[i];
+    }
   }
 
   MPI_Bcast(counts_.data(), proc_num_, MPI_INT, 0, MPI_COMM_WORLD);
