@@ -2,7 +2,6 @@
 
 #include <cmath>
 #include <cstdint>
-#include <numeric>
 
 #include "otcheskov_s_elem_vec_avg/common/include/common.hpp"
 
@@ -23,7 +22,10 @@ bool OtcheskovSElemVecAvgSEQ::PreProcessingImpl() {
 }
 
 bool OtcheskovSElemVecAvgSEQ::RunImpl() {
-  int64_t sum = std::reduce(GetInput().begin(), GetInput().end(), static_cast<int64_t>(0));
+  int64_t sum{};
+  for (int val : GetInput()) {
+    sum += val;
+  }
   GetOutput() = static_cast<double>(sum) / static_cast<double>(GetInput().size());
   return !std::isnan(GetOutput());
 }

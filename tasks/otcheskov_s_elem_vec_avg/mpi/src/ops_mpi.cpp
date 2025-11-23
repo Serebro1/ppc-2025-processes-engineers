@@ -4,7 +4,6 @@
 
 #include <cmath>
 #include <cstdint>
-#include <numeric>
 #include <vector>
 
 #include "otcheskov_s_elem_vec_avg/common/include/common.hpp"
@@ -43,7 +42,10 @@ bool OtcheskovSElemVecAvgMPI::RunImpl() {
 
   ComputeDistribution(total_size);
 
-  int64_t local_sum = std::reduce(GetInput().begin(), GetInput().end(), static_cast<int64_t>(0));
+  int64_t local_sum{};
+  for (int val : local_data_) {
+    local_sum += val;
+  }
 
   int64_t total_sum{};
   MPI_Allreduce(&local_sum, &total_sum, 1, MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD);
