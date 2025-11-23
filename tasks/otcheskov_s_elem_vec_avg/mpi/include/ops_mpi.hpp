@@ -19,6 +19,8 @@ class OtcheskovSElemVecAvgMPI : public BaseTask {
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
+  void ComputeDistribution(int total_size);
+
   int proc_rank_{};
   int proc_num_{};
   std::vector<int> local_data_;

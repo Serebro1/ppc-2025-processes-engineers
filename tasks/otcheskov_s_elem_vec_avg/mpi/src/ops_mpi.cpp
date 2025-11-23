@@ -39,9 +39,24 @@ bool OtcheskovSElemVecAvgMPI::RunImpl() {
   if (proc_rank_ == 0) {
     total_size = static_cast<int>(GetInput().size());
   }
-
   MPI_Bcast(&total_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
+  ComputeDistribution(total_size);
+
+  int64_t local_sum = std::reduce(GetInput().begin(), GetInput().end(), static_cast<int64_t>(0));
+
+  int64_t total_sum{};
+  MPI_Allreduce(&local_sum, &total_sum, 1, MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD);
+  GetOutput() = static_cast<double>(total_sum) / static_cast<double>(total_size);
+
+  return !std::isnan(GetOutput());
+}
+
+bool OtcheskovSElemVecAvgMPI::PostProcessingImpl() {
+  return true;
+}
+
+void OtcheskovSElemVecAvgMPI::ComputeDistribution(int total_size) {
   int local_size = total_size / proc_num_;
   int remainder = total_size % proc_num_;
   int proc_size = local_size + (proc_rank_ < remainder ? 1 : 0);
@@ -49,7 +64,6 @@ bool OtcheskovSElemVecAvgMPI::RunImpl() {
   local_data_.resize(proc_size);
   counts_.resize(proc_num_);
   displacements_.resize(proc_num_);
-
   if (proc_rank_ == 0) {
     int offset = 0;
     for (int i = 0; i < proc_num_; i++) {
@@ -60,19 +74,8 @@ bool OtcheskovSElemVecAvgMPI::RunImpl() {
   }
   MPI_Bcast(counts_.data(), proc_num_, MPI_INT, 0, MPI_COMM_WORLD);
   MPI_Bcast(displacements_.data(), proc_num_, MPI_INT, 0, MPI_COMM_WORLD);
-
   MPI_Scatterv(GetInput().data(), counts_.data(), displacements_.data(), MPI_INT, local_data_.data(), proc_size,
                MPI_INT, 0, MPI_COMM_WORLD);
-
-  int64_t local_sum = std::reduce(local_data_.begin(), local_data_.end(), static_cast<int64_t>(0));
-  int64_t total_sum = 0;
-  MPI_Allreduce(&local_sum, &total_sum, 1, MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD);
-  GetOutput() = static_cast<double>(total_sum) / static_cast<double>(total_size);
-  return !std::isnan(GetOutput());
-}
-
-bool OtcheskovSElemVecAvgMPI::PostProcessingImpl() {
-  return true;
 }
 
 }  // namespace otcheskov_s_elem_vec_avg
