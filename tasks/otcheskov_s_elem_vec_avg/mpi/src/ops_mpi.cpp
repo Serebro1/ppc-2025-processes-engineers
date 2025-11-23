@@ -42,10 +42,6 @@ bool OtcheskovSElemVecAvgMPI::RunImpl() {
 
   MPI_Bcast(&total_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-  if (total_size == 0) {
-    return false;
-  }
-
   int local_size = total_size / proc_num_;
   int remainder = total_size % proc_num_;
   int proc_size = local_size + (proc_rank_ < remainder ? 1 : 0);

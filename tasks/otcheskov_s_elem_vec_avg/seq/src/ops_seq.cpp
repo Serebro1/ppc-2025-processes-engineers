@@ -23,10 +23,6 @@ bool OtcheskovSElemVecAvgSEQ::PreProcessingImpl() {
 }
 
 bool OtcheskovSElemVecAvgSEQ::RunImpl() {
-  if (GetInput().empty()) {
-    return false;
-  }
-
   int64_t sum = std::reduce(GetInput().begin(), GetInput().end(), static_cast<int64_t>(0));
   GetOutput() = static_cast<double>(sum) / static_cast<double>(GetInput().size());
   return !std::isnan(GetOutput());

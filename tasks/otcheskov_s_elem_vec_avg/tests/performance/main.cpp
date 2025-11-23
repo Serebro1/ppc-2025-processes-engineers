@@ -53,8 +53,8 @@ class OtcheskovSElemVecAvgPerfTests : public ppc::util::BaseRunPerfTests<InType,
     input_data_.insert(input_data_.end(), input_data_.begin(), input_data_.end());
     // 512 000 000 elements
     input_data_.insert(input_data_.end(), input_data_.begin(), input_data_.end());
-    // 1024 000 000 elements
-    input_data_.insert(input_data_.end(), input_data_.begin(), input_data_.end());
+    // 768 000 000 elements
+    input_data_.insert(input_data_.end(), input_data_.begin(), input_data_.end() - (input_data_.size() / 2));
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
