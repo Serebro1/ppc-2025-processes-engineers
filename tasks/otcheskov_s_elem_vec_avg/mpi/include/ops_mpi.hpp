@@ -1,7 +1,5 @@
 #pragma once
 
-#include <vector>
-
 #include "otcheskov_s_elem_vec_avg/common/include/common.hpp"
 #include "task/include/task.hpp"
 namespace otcheskov_s_elem_vec_avg {
