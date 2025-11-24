@@ -50,36 +50,36 @@
 
 ### 4.1. Распределение данных
 - Блочное распределение:
+  - Ранг 0 распределяет данные между всеми процессами с помощью `MPI_Scatterv`
   - Размер базового блока (`batch_size`) элементов определяется как `число элементов вектора / число процессов`.
   - Размер локальной части для процесса (`proc_size`) равно размеру базового блока.
-  - Если есть остаток от деления числа элементов, то он добавляется в `proc_size` последнего процесса.
-  - Начало сегмента данных для процесса определяется как `начало исходного вектора + ранг процесса * размер базового блока`.
-  - Конец сегмента данных определяется как `начало локальной части + proc_size`.
-- Таким образом, каждый процесс работает с помощью итераторов напрямую со своей локальной частью данных в исходном векторе.
+  - Если есть остаток от деления числа элементов, то он добавляется по одному элементу в `proc_size` первым процессам.
+  - Каждый процесс получает только свою часть данных в локальный буфер `local_data`
 
 ### 4.2. Топология коммуникаций
-- Линейная топология (все процессы связаны через MPI_COMM_WORLD).
-- Все процессы равноправны — отсутствие выделенных master/slave процессов.
-- Все процессы участвуют в коммуникации.
+- Линейная топология (все процессы связаны через `MPI_COMM_WORLD`).
+- Роль процессов:
+  - **Ранг 0**: координатор — вычисляет распределение, рассылает метаданные, распределяет данные
+  - **Все ранги**: рабочие — получают свою часть данных, вычисляют локальную сумму
 
 ### 4.3. Паттерны коммуникации
-- В MPI реализации используется коллективная коммуникация «Каждый к каждому».
-- Коллективная функция `MPI_Allreduce`:
-    ```c++
-    MPI_Allreduce(&local_sum, &total_sum, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-    ```
-- Характеристики `MPI_Allreduce`:
-  - Тип операции: All-to-All с агрегацией результатов.
-  - Режим работы: блокирующая операция.
-  - Операция: суммирование (`MPI_SUM`).
-  - Объём передаваемых данных: одно целое число с каждого процесса.
+- В MPI реализации используются коллективные блокирующие функции.
+- Функция `MPI_Bcast`:
+  - Применяется в валидации, чтобы каждый процесс прошёл проверку аналогично процессу ранга 0.
+  - Применяется для рассылки массивов числа локальных элементов (`counts`) и смещений в исходном массиве (`displacements`), чтобы использовать `MPI_Scatterv`
+- Функция `MPI_Scatterv`:
+  - Рассылает части исходного вектора процессам в локальный буффер `local_data`, основываясь на числе элементов конкретного процесса в `counts[proc_rank]` и смещении `displacements[proc_rank]`.
+- Функция `MPI_Allreduce`:
+  1. Производит операцию суммирования (`MPI_SUM`) локальных сумм со всех процессов.
+  2. Итоговую сумму и рассылкает её всем процессам
 
 ### 4.4. Распределение вычислений
 1. **Инициализация MPI** — получение ранга и числа процессов.
-2. **Определение границ** — вычисление локального сегмента данных.
-3. **Локальные вычисления**— суммирование элементов локального сегмента.
-4. **Глобальная редукция** — объединение локальных сумм.
-5. **Финальное вычисление** — расчёт среднего значения.
+2. **Определение распределения** — вычисление размеров блоков и смещений.
+3. **Распределение данных** — рассылка частей вектора на процессы.
+4. **Локальные вычисления**— суммирование элементов локального сегмента.
+5. **Глобальная редукция** — объединение локальных сумм.
+6. **Финальное вычисление** — расчёт среднего значения.
 
 ## 5. Особенности реализаций
 
@@ -150,7 +150,7 @@ bool OtcheskovSElemVecAvgSEQ::RunImpl() {
   }
 
   // вычисляем среднее арифметическое элементов вектора
-  int64_t sum = std::reduce(GetInput().begin(), GetInput().end(), static_cast<int64_t>(0));
+  int64_t sum = std::reduce(GetInput().begin(), GetInput().end(), int64_t{0});
   GetOutput() = static_cast<double>(sum) / static_cast<double>(GetInput().size());
   return !std::isnan(GetOutput());
 }
@@ -167,10 +167,14 @@ bool OtcheskovSElemVecAvgSEQ::PostProcessingImpl() {
 ```
 
 ### 5.3. Реализация параллельной версии
-Этапы: **ValidationImpl**, **PreProcessingImpl**, **PostProcessingImpl** аналогичны последовательной версии.
+**Этапы:** `PreProcessingImpl`, `PostProcessingImpl` аналогичны последовательной версии.
+
+#### 5.3.1. ValidationImpl
+- Выполняется проверка на процессе ранга 0, аналогична реализации в последовательной версии.
+- Результат проверки рассылкается всем процессам через `MPI_Bcast`
+- Таким образом, проверка едина для всех процессов.
 
 #### 5.3.1. RunImpl
-- Дополнительная проверка на пустоту вектора.
 - Распределение данных, как описано в разделе [4.1. Распределение данных](#41-распределение-данных).
 - Вычисление локальных сумм.
 - С помощью `MPI_Allreduce` выполняется:
@@ -179,53 +183,18 @@ bool OtcheskovSElemVecAvgSEQ::PostProcessingImpl() {
   - Передача результата всем процессам.
 
 **Реализация на C++:**
-```c++
-bool OtcheskovSElemVecAvgMPI::RunImpl() {
-  // проверка на пустоту вектора
-  if (GetInput().empty()) {
-    return false;
-  }
-
-  // ранг процесса и число процессов
-  int proc_rank{};
-  int proc_num{};
-  MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &proc_num);
-
-  // распределение данных процессам
-  const size_t total_size = GetInput().size();
-  const size_t batch_size = total_size / proc_num;
-  const size_t proc_size = batch_size + (proc_rank == proc_num - 1 ?total_size % proc_num : 0);
-  
-  // процесс определяет свои границы локальных данных
-  auto start_local_data = GetInput().begin() + static_cast<std::vector<int>::difference_type>(proc_rank * batch_size);
-  auto end_local_data = start_local_data + static_cast<std::vector<int>::difference_type>(proc_size);
-
-  // процесс вычисляет свою локальную сумму
-  int64_t local_sum = std::reduce(start_local_data, end_local_data, static_cast<int64_t>(0));
-  int64_t total_sum = 0;
-  
-  // собирает у процессов локальные суммы, складывает их в total_sum и раздёт процессам
-  MPI_Allreduce(&local_sum, &total_sum, 1, MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD);
-  
-  // вычисляет среднее арифметическое
-  GetOutput() = static_cast<double>(total_sum) / static_cast<double>(total_size);
-  return !std::isnan(GetOutput());
-}
-```
+- Представлена в разделе [Приложение №3 — Параллельная версия решения задачи
+](#1032-файл-реализации)
 
 ### 5.4. Использование памяти
-- Последовательная версия: `O(N)` — входной вектор произвольной длины N.
-- Параллельная версия: `O(N * число процессов)` — каждый процесс хранит полную копию вектора.
+- Последовательная версия: `O(N)` — входной вектор произвольной длины `N`.
+- Параллельная версия: 
+  - Ранг 0: `O(N)` — хранит исходный массив + `O(N/P)` — локальная часть данных исходного массива, распределённого `P` процессам.
+  - Остальные ранги: `O(N/P)` — локальная часть данных исходного массива, распределённого `P` процессам.
 
 ### 5.5. Допущения и крайние случаи
-- Не вполне равномерное распределение:
-  - На малом числе процессов не влияет на производительность.
-  - Минимизирует код для распределения данных.
-
-- В параллельной версии каждый процесс хранит входной вектор:
-  - Требует больше оперативной памяти для хранения копии вектора в каждом процессе.
-  - Минимизирует число необходимых коммуникаций между процессами.
+- Все процессы запускаются в рамках одного MPI-коммуникатора.
+- Ранг 0 является корневым процессом для распределения данных и валидации.
 
 
 ## 6. Тестовые инфраструктуры
@@ -248,6 +217,7 @@ bool OtcheskovSElemVecAvgMPI::RunImpl() {
 ### 6.3. Общие настройки
 - **Переменные окружения:** PPC_NUM_PROC = 2, 4.
 - **Данные:** элементы вектора хранятся в `test_vec*.txt` файлах в директории `./data`.
+
 
 ## 7. Результаты и обсуждение
 
@@ -309,105 +279,66 @@ bool OtcheskovSElemVecAvgMPI::RunImpl() {
 ### 7.2. Производительные тесты
 
 #### 7.2.1. Методология тестирования
-- **Данные:** вектор из 1 миллиона элементов дублируется до 32 и 512 миллионов. Данные для вектора берутся из файла `./data/test_vec_one_million_elems.txt`.
+- **Данные:** вектор из 1 миллиона элементов дублируется до 512 миллионов. Данные для вектора берутся из файла `./data/test_vec_one_million_elems.txt`.
 - **Режимы:**
   - **pipeline** — запуск и измерение времени всех этапов алгоритма (`Validation -> PreProcessing -> Run -> PostProcessing`).
   - **task_run** — запуск всех этапов алгоритма, но измеряется время только на этапе `Run`.
-- **Метрики:** число процессов, абсолютное время выполнения pipeline и task_run, ускорение, эффективность.
-- В итоговой реализации показан тест на векторе из 512 миллионов элементов.
+- **Производительность** мерилась только в режиме `task_run`
+- **Метрики:** число процессов, абсолютное время выполнения task_run, ускорение, эффективность.
 
-#### 7.2.2. Результаты тестирования на векторе из 32 миллионов элементов
-
-**Windows:**
-| Режим          | Процессов | Время, s | Ускорение | Эффективность |
-| -------------- | --------- | -------- | --------- | ------------- |
-| seq (pipeline) | 1         | 0.049592 | 1.0000    | N/A           |
-| mpi (pipeline) | 2         | 0.024586 | 2.0159    | 100.8%        |
-| mpi (pipeline) | 4         | 0.017337 | 2.8605    | 71.5%         |
-| seq (task_run) | 1         | 0.049799 | 1.0000    | N/A           |
-| mpi (task_run) | 2         | 0.027084 | 1.8387    | 91.9%         |
-| mpi (task_run) | 4         | 0.014524 | 3.4287    | 85.7%         |
-
-**WSL:**
-| Режим          | Процессов | Время, s | Ускорение | Эффективность |
-| -------------- | --------- | -------- | --------- | ------------- |
-| seq (pipeline) | 1         | 0.154427 | 1.0000    | N/A           |
-| mpi (pipeline) | 2         | 0.077826 | 1.9843    | 99.2%         |
-| mpi (pipeline) | 4         | 0.041513 | 3.7199    | 92.9%         |
-| seq (task_run) | 1         | 0.162249 | 1.0000    | N/A           |
-| mpi (task_run) | 2         | 0.086869 | 1.8677    | 93.4%         |
-| mpi (task_run) | 4         | 0.048871 | 3.3199    | 82.9%         |
-
-**\*GitHub:**
-| Режим          | Процессов | Время, s | Ускорение | Эффективность |
-| -------------- | --------- | -------- | --------- | ------------- |
-| seq (pipeline) | 1         | 0.005423 | 1.0000    | N/A           |
-| mpi (pipeline) | 2         | 0.003351 | 1.6183    | 80.9%         |
-| seq (task_run) | 1         | 0.005457 | 1.0000    | N/A           |
-| mpi (task_run) | 2         | 0.003553 | 1.5359    | 76.8%         |
-
-#### 7.2.3. Результаты тестирования на 512 миллионов элементов
+#### 7.2.2. Результаты тестирования на 512 миллионов элементов
 
 **Windows:**
-| Режим          | Процессов | Время, s | Ускорение | Эффективность |
-| -------------- | --------- | -------- | --------- | ------------- |
-| seq (pipeline) | 1         | 0.675529 | 1.0000    | N/A           |
-| mpi (pipeline) | 2         | 0.390001 | 1.7321    | 86.6%         |
-| mpi (pipeline) | 4         | 0.235353 | 2.8702    | 71.8%         |
-| seq (task_run) | 1         | 0.710808 | 1.0000    | N/A           |
-| mpi (task_run) | 2         | 0.388543 | 1.8294    | 91.3%         |
-| mpi (task_run) | 4         | 0.235275 | 3.0212    | 75.5%         |
+| Режим | Процессов | Время, s | Ускорение | Эффективность |
+| ----- | --------- | -------- | --------- | ------------- |
+| seq   | 1         | 0.089805 | 1.0000    | N/A           |
+| mpi   | 2         | 0.528954 | 0.1698    | 8.5%          |
+| mpi   | 4         | 0.427870 | 0.2081    | 5%            |
 
 **WSL:**
-| Режим          | Процессов | Время, s | Ускорение | Эффективность |
-| -------------- | --------- | -------- | --------- | ------------- |
-| seq (pipeline) | 1         | 2.443846 | 1.0000    | N/A           |
-| mpi (pipeline) | 2         | 1.270955 | 1.9228    | 96.1%         |
-| seq (task_run) | 1         | 2.448493 | 1.0000    | N/A           |
-| mpi (task_run) | 2         | 1.248421 | 1.9613    | 98.1%         |
+| Режим | Процессов | Время, s | Ускорение | Эффективность |
+| ----- | --------- | -------- | --------- | ------------- |
+| seq   | 1         | 0.613402 | 1.0000    | N/A           |
+| mpi   | 2         | 2.407203 | 0.2548    | 12.7%         |
+| mpi   | 4         | 1.401476 | 0.4377    | 10.9%         |
 
 **\*GitHub:**
-| Режим          | Процессов | Время, s | Ускорение | Эффективность |
-| -------------- | --------- | -------- | --------- | ------------- |
-| seq (pipeline) | 1         | 0.090900 | 1.0000    | N/A           |
-| mpi (pipeline) | 2         | 0.054742 | 1.6605    | 83.0%         |
-| seq (task_run) | 1         | 0.096574 | 1.0000    | N/A           |
-| mpi (task_run) | 2         | 0.059635 | 1.6194    | 80.9%         |
+| Режим | Процессов | Время, s | Ускорение | Эффективность |
+| ----- | --------- | -------- | --------- | ------------- |
+| seq   | 1         | 0.097631 | 1.0000    | N/A           |
+| mpi   | 2         | 0.261573 | 0.3733    | 18.7%         |
 
 *\*Результаты собирались на локальном форке из Github Actions*
 
 ### 7.3. Анализ результатов
 
-- **Эффективность:**
-  - Высокая эффективность на малом числе процессов (до 90%+ на двух процессах).
-  - Снижение эффективности при увеличении числа процессов (до 70-85% на четырёх процессах).
+- **Аномально низкая производительность:**
+  - На объёме данных в 512 миллионов элементов наблюдается значительное замедление MPI-версии по сравнению с последовательной реализацией.
+  - На всех тестовых платформах ускорение составляет менее 1 (0.17-0.44).
+  - Эффективность падает до  значений (5-19%)
 
-- **Производительность:**
-  - MPI-версия демонстрирует близкое к линейному ускорение на двух процессах.
-  - Наиболее стабильной из тестовых инфраструктур является машина на GitHub.
+- **Сравнение инфраструктур:**
+  - Наиболее стабильной и быстрой из тестовых инфраструктур является машина на GitHub.
   - WSL также показывает стабильный результат, но является самой медленной инфраструктурой, что, вероятно, связано архитектурными особенностями технологии.
-  - Наименее стабильной была тестовая инфраструктура на Windows (процент эффективности на тестах варьировался от 60% до 100% при каждом запуске).
 
 - **Ограничения масштабируемости:**
-  - Требуется значительный объём оперативной памяти для хранения вектора в каждом процессе.
-  - Из-за затрат на коммуникацию между процессами эффективность снижается при увеличении числа процессов.
+  - Из-за затрат на коммуникацию между процессами эффективность значительно снижается.
+
 
 ## 8. Заключения
 
 ### 8.1. Достигнутые результаты:
-1. **Эффективное распараллеливание** — достигнуто значительное ускорение на больших объёмах данных.
-2. **Схема распределения данных** — блочная схема, требующая минимумального количества операций для данной задачи.
-3. **Минимальные коммуникации** — использование единственной коллективной операции `MPI_Allreduce`.
-4. **Корректность результатов** — полное соответствие последовательной и параллельной версий.
+1. **Схема распределения данных** — блочная схема распределения, которая равномерно распределяет данные процессам.
+2. **Эффективное использования памяти** — текущая реализация требует хранения части исходного вектора в каждом процессе и целого вектора в процессе ранга 0.
+3. **Корректность результатов** — полное соответствие последовательной и параллельной версий.
+4. **Модульность и тестируемость** — код структурирован и покрыт функциональными и валидационными тестами.
 
-### 8.2. Возможные улучшения:
-1. **Оптимизация использования памяти** — текущая реализация требует хранения копии исходного вектора в каждом процессе.
-2. **Равномерное распределение** — устранение неравномерности при некратном делении.
-3. **Улучшение масштабируемости** — снижение эффективности при большом числе процессов.
+### 8.2. Выявленные проблемы и возможные улучшения:
+1. **Улучшение масштабируемости** — текущая реализация демонстрирует аномально низкую эффективность (5-19%) при работе с большими объёмами данных.
+2. **Оптимизация коммуникационных операций** — необходимо исследовать причины значительных накладных расходов на этапе распределения данных входного вектора процессам.
+3. **Рассмотрение более эффективных реализаций** — рассмотреть реализации, где минимизированы накладные расходны на передачу данных между процессами.
 
 В рамках данной работы успешно решена задача вычисления среднего арифметического элементов вектора, реализованы два решения: последовательное и параллельное с использованием MPI.
-
-Параллельное решение демонстрирует значительное ускорение и хорошую эффективность для данной задачи, что позволяет рекомендовать его использование в более сложных вычислительных задачах и при анализе данных. 
 
 ## 9. Источники
 1. std::reduce // cppreference.com URL: https://en.cppreference.com/w/cpp/algorithm/reduce.html (дата обращения: 12.11.2025).
@@ -498,7 +429,7 @@ bool OtcheskovSElemVecAvgSEQ::RunImpl() {
     return false;
   }
 
-  int sum = std::reduce(GetInput().begin(), GetInput().end());
+  int sum = std::reduce(GetInput().begin(), GetInput().end(), uint64_t{0});
   GetOutput() = sum / static_cast<double>(GetInput().size());
   return !std::isnan(GetOutput());
 }
@@ -515,11 +446,6 @@ bool OtcheskovSElemVecAvgSEQ::PostProcessingImpl() {
 #### 10.3.1. Заголовочный файл
 Файл: `./mpi/ops_mpi.hpp`.
 ```cpp
-#pragma once
-
-#include "otcheskov_s_elem_vec_avg/common/include/common.hpp"
-#include "task/include/task.hpp"
-
 namespace otcheskov_s_elem_vec_avg {
 
 class OtcheskovSElemVecAvgMPI : public BaseTask {
@@ -534,6 +460,9 @@ class OtcheskovSElemVecAvgMPI : public BaseTask {
   bool PreProcessingImpl() override;
   bool RunImpl() override;
   bool PostProcessingImpl() override;
+
+  int proc_rank_{};
+  int proc_num_{};
 };
 
 }  // namespace otcheskov_s_elem_vec_avg
@@ -542,28 +471,25 @@ class OtcheskovSElemVecAvgMPI : public BaseTask {
 #### 10.3.2. Файл реализации
 Файл: `./mpi/ops_mpi.cpp`.
 ```cpp
-#include "otcheskov_s_elem_vec_avg/mpi/include/ops_mpi.hpp"
-
-#include <mpi.h>
-
-#include <cmath>
-#include <cstddef>
-#include <cstdint>
-#include <numeric>
-#include <vector>
-
-#include "otcheskov_s_elem_vec_avg/common/include/common.hpp"
-
 namespace otcheskov_s_elem_vec_avg {
 
 OtcheskovSElemVecAvgMPI::OtcheskovSElemVecAvgMPI(const InType &in) {
+  MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank_);
+  MPI_Comm_size(MPI_COMM_WORLD, &proc_num_);
   SetTypeOfTask(GetStaticTypeOfTask());
-  GetInput() = in;
+  if (proc_rank_ == 0) {
+    GetInput() = in;
+  }
   GetOutput() = NAN;
 }
 
 bool OtcheskovSElemVecAvgMPI::ValidationImpl() {
-  return (!GetInput().empty() && std::isnan(GetOutput()));
+  bool is_valid = true;
+  if (proc_rank_ == 0) {
+    is_valid = !GetInput().empty() && std::isnan(GetOutput());
+  }
+  MPI_Bcast(&is_valid, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD);
+  return is_valid;
 }
 
 bool OtcheskovSElemVecAvgMPI::PreProcessingImpl() {
@@ -571,25 +497,39 @@ bool OtcheskovSElemVecAvgMPI::PreProcessingImpl() {
 }
 
 bool OtcheskovSElemVecAvgMPI::RunImpl() {
-  if (GetInput().empty()) {
-    return false;
+  // передача размера исходного массива
+  int total_size = 0;
+  if (proc_rank_ == 0) {
+    total_size = static_cast<int>(GetInput().size());
   }
+  MPI_Bcast(&total_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-  int proc_rank{};
-  int proc_num{};
-  MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &proc_num);
+  // распределение данных
+  int batch_size = total_size / proc_num_;
+  int remainder = total_size % proc_num_;
+  int proc_size = batch_size + (proc_rank_ < remainder ? 1 : 0);
+  InType local_data(proc_size);
+  std::vector<int> displacements;
+  std::vector<int> counts;
+  if (proc_rank_ == 0) {
+    displacements.resize(proc_num_);
+    counts.resize(proc_num_);
+    int offset = 0;
+    for (int i = 0; i < proc_num_; i++) {
+      counts[i] = batch_size + (i < remainder ? 1 : 0);
+      displacements[i] = offset;
+      offset += counts[i];
+    }
+  }
+  MPI_Scatterv(GetInput().data(), counts.data(), displacements.data(), MPI_INT, local_data.data(), proc_size, MPI_INT,
+               0, MPI_COMM_WORLD);
 
-  const size_t total_size = GetInput().size();
-  const size_t batch_size = total_size / proc_num;
-  const size_t proc_size = batch_size + (proc_rank == proc_num - 1 ? total_size % proc_num : 0);
-  auto start_local_data = GetInput().begin() + static_cast<std::vector<int>::difference_type>(proc_rank * batch_size);
-  auto end_local_data = start_local_data + static_cast<std::vector<int>::difference_type>(proc_size);
+  // вычисления среднего элементов вектора
+  int64_t local_sum = std::reduce(local_data.begin(), local_data.end(), int64_t{0});
+  int64_t total_sum = 0;
+  MPI_Allreduce(&local_sum, &total_sum, 1, MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD);
+  GetOutput() = static_cast<double>(total_sum) / static_cast<double>(total_size);
 
-  int local_sum = std::reduce(start_local_data, end_local_data);
-  int total_sum = 0;
-  MPI_Allreduce(&local_sum, &total_sum, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-  GetOutput() = total_sum / static_cast<double>(total_size);
   return !std::isnan(GetOutput());
 }
 
@@ -598,35 +538,12 @@ bool OtcheskovSElemVecAvgMPI::PostProcessingImpl() {
 }
 
 }  // namespace otcheskov_s_elem_vec_avg
+
 ```
 
 ### 10.4. Приложение №4 — функциональные и валидационные тесты
 Файл: `./tests/functional/main.cpp`.
 ```cpp
-#include <gtest/gtest.h>
-#include <stb/stb_image.h>
-
-#include <array>
-#include <cctype>
-#include <cmath>
-#include <cstddef>
-#include <fstream>
-#include <iomanip>
-#include <ios>
-#include <iostream>
-#include <limits>
-#include <sstream>
-#include <stdexcept>
-#include <string>
-#include <tuple>
-
-#include "otcheskov_s_elem_vec_avg/common/include/common.hpp"
-#include "otcheskov_s_elem_vec_avg/mpi/include/ops_mpi.hpp"
-#include "otcheskov_s_elem_vec_avg/seq/include/ops_seq.hpp"
-#include "task/include/task.hpp"
-#include "util/include/func_test_util.hpp"
-#include "util/include/util.hpp"
-
 namespace otcheskov_s_elem_vec_avg {
 // функциональные тесты
 class OtcheskovSElemVecAvgFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType, TestType> {
@@ -830,20 +747,6 @@ INSTANTIATE_TEST_SUITE_P(VectorAverageFuncTestsValidation, OtcheskovSElemVecAvgF
 ### 10.5. Приложение №5 — проиводительные тесты
 Файл: `./tests/performance/main.cpp`.
 ```cpp
-#include <gtest/gtest.h>
-
-#include <cmath>
-#include <fstream>
-#include <limits>
-#include <stdexcept>
-#include <string>
-
-#include "otcheskov_s_elem_vec_avg/common/include/common.hpp"
-#include "otcheskov_s_elem_vec_avg/mpi/include/ops_mpi.hpp"
-#include "otcheskov_s_elem_vec_avg/seq/include/ops_seq.hpp"
-#include "util/include/perf_test_util.hpp"
-#include "util/include/util.hpp"
-
 namespace otcheskov_s_elem_vec_avg {
 
 class OtcheskovSElemVecAvgPerfTests : public ppc::util::BaseRunPerfTests<InType, OutType> {
