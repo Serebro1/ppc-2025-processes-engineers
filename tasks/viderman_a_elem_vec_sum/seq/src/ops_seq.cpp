@@ -6,12 +6,12 @@ namespace viderman_a_elem_vec_sum {
 
 VidermanAElemVecSumSEQ::VidermanAElemVecSumSEQ(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
-  GetInput() = in;  // Устанавливаем входные данные после создания
+  GetInput() = in;
   GetOutput() = 0.0;
 }
 
 bool VidermanAElemVecSumSEQ::ValidationImpl() {
-  return (!GetInput().empty() && GetOutput() == 0.0);
+  return (GetOutput() == 0.0);
 }
 
 bool VidermanAElemVecSumSEQ::PreProcessingImpl() {

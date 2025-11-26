@@ -15,7 +15,7 @@ VidermanAElemVecSumMPI::VidermanAElemVecSumMPI(const InType &in) {
 }
 
 bool VidermanAElemVecSumMPI::ValidationImpl() {
-  return (!GetInput().empty() && GetOutput() == 0.0);
+  return (GetOutput() == 0.0);
 }
 
 bool VidermanAElemVecSumMPI::PreProcessingImpl() {
@@ -34,20 +34,38 @@ bool VidermanAElemVecSumMPI::RunImpl() {
   MPI_Comm_size(MPI_COMM_WORLD, &total_processes);
 
   const size_t element_count = input_vector.size();
-  const size_t base_chunk = element_count / total_processes;
-  const size_t remaining_elements = element_count % total_processes;
+  const auto total_procs_size = static_cast<size_t>(total_processes);
 
+  // процессов больше чем элементов
+  if (total_procs_size > element_count) {
+    if (static_cast<size_t>(my_rank) < element_count) {
+      double single_element = input_vector[static_cast<size_t>(my_rank)];
+      double final_result = 0.0;
+      MPI_Allreduce(&single_element, &final_result, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      GetOutput() = final_result;
+    } else {
+      double zero = 0.0;
+      double final_result = 0.0;
+      MPI_Allreduce(&zero, &final_result, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      GetOutput() = final_result;
+    }
+    return true;
+  }
+
+  const size_t base_chunk = element_count / total_procs_size;
+  const size_t remaining_elements = element_count % total_procs_size;
   size_t my_chunk_size = base_chunk;
-  if (my_rank < remaining_elements) {
+  if (static_cast<size_t>(my_rank) < remaining_elements) {
     my_chunk_size = base_chunk + 1;
   }
 
-  size_t start_position = my_rank * base_chunk;
-  if (my_rank <= remaining_elements && remaining_elements > 0) {
-    start_position += my_rank;
+  size_t start_position = static_cast<size_t>(my_rank) * base_chunk;
+  if (static_cast<size_t>(my_rank) <= remaining_elements && remaining_elements > 0) {
+    start_position += static_cast<size_t>(my_rank);
   } else {
     start_position += remaining_elements;
   }
+
   double process_sum = 0.0;
   auto segment_start = input_vector.begin() + start_position;
   auto segment_end = segment_start + my_chunk_size;
@@ -58,6 +76,7 @@ bool VidermanAElemVecSumMPI::RunImpl() {
 
   double final_result = 0.0;
   MPI_Allreduce(&process_sum, &final_result, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
   GetOutput() = final_result;
   return true;
 }
