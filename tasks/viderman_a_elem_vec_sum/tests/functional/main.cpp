@@ -4,13 +4,10 @@
 #include <cmath>
 #include <cstddef>
 #include <fstream>
-#include <iomanip>
 #include <limits>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <tuple>
-#include <vector>
 
 #include "util/include/func_test_util.hpp"
 #include "util/include/util.hpp"

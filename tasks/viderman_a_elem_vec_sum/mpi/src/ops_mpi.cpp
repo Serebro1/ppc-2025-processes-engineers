@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <vector>
 
+#include "viderman_a_elem_vec_sum/common/include/common.hpp"
+
 namespace viderman_a_elem_vec_sum {
 
 VidermanAElemVecSumMPI::VidermanAElemVecSumMPI(const InType &in) {
@@ -33,9 +35,9 @@ bool VidermanAElemVecSumMPI::RunImpl() {
   MPI_Comm_rank(MPI_COMM_WORLD, &int_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &total_processes);
 
-  const size_t my_rank = static_cast<size_t>(int_rank);
+  const auto my_rank = static_cast<size_t>(int_rank);
   const size_t element_count = input_vector.size();
-  const size_t total_procs_size = static_cast<size_t>(total_processes);
+  const auto total_procs_size = static_cast<size_t>(total_processes);
 
   // процессов больше чем элементов
   if (total_procs_size > element_count) {
