@@ -2,8 +2,7 @@
 
 #include <mpi.h>
 
-#include <algorithm>
-#include <numeric>
+#include <cstddef>
 #include <vector>
 
 namespace viderman_a_elem_vec_sum {
@@ -29,17 +28,19 @@ bool VidermanAElemVecSumMPI::RunImpl() {
     return true;
   }
 
-  int my_rank = 0, total_processes = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  int int_rank = 0;
+  int total_processes = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &int_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &total_processes);
+  const size_t my_rank = static_cast<size_t>(int_rank);
 
   const size_t element_count = input_vector.size();
-  const auto total_procs_size = static_cast<size_t>(total_processes);
+  const auto total_procs_size = total_processes;
 
   // процессов больше чем элементов
   if (total_procs_size > element_count) {
-    if (static_cast<size_t>(my_rank) < element_count) {
-      double single_element = input_vector[static_cast<size_t>(my_rank)];
+    if (my_rank < element_count) {
+      double single_element = input_vector[my_rank];
       double final_result = 0.0;
       MPI_Allreduce(&single_element, &final_result, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
       GetOutput() = final_result;
@@ -55,20 +56,20 @@ bool VidermanAElemVecSumMPI::RunImpl() {
   const size_t base_chunk = element_count / total_procs_size;
   const size_t remaining_elements = element_count % total_procs_size;
   size_t my_chunk_size = base_chunk;
-  if (static_cast<size_t>(my_rank) < remaining_elements) {
+  if (my_rank < remaining_elements) {
     my_chunk_size = base_chunk + 1;
   }
 
-  size_t start_position = static_cast<size_t>(my_rank) * base_chunk;
-  if (static_cast<size_t>(my_rank) <= remaining_elements && remaining_elements > 0) {
-    start_position += static_cast<size_t>(my_rank);
+  size_t start_position = my_rank * base_chunk;
+  if (my_rank <= remaining_elements && remaining_elements > 0) {
+    start_position += my_rank;
   } else {
     start_position += remaining_elements;
   }
 
   double process_sum = 0.0;
-  auto segment_start = input_vector.begin() + start_position;
-  auto segment_end = segment_start + my_chunk_size;
+  auto segment_start = input_vector.begin() + static_cast<std::ptrdiff_t>(start_position);
+  auto segment_end = segment_start + static_cast<std::ptrdiff_t>(my_chunk_size);
 
   for (auto it = segment_start; it != segment_end; ++it) {
     process_sum += *it;

@@ -2,6 +2,8 @@
 
 #include <numeric>
 
+#include "viderman_a_elem_vec_sum/common/include/common.hpp"
+
 namespace viderman_a_elem_vec_sum {
 
 VidermanAElemVecSumSEQ::VidermanAElemVecSumSEQ(const InType &in) {

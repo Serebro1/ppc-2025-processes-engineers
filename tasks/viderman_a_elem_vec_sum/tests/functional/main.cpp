@@ -26,7 +26,7 @@ class VidermanAElemVecSumFuncTests : public ppc::util::BaseRunFuncTests<InType, 
     auto [filename, expected_sum] = test_param;
     return filename.substr(0, filename.find('.'));
   }
-  // Результат: "test_vec_single_negative_viderman_neg_15"
+
  protected:
   void SetUp() override {
     TestType params = std::get<static_cast<std::size_t>(ppc::util::GTestParamIndex::kTestParams)>(GetParam());
