@@ -32,10 +32,10 @@ bool VidermanAElemVecSumMPI::RunImpl() {
   int total_processes = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &int_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &total_processes);
-  const size_t my_rank = static_cast<size_t>(int_rank);
 
+  const size_t my_rank = static_cast<size_t>(int_rank);
   const size_t element_count = input_vector.size();
-  const auto total_procs_size = total_processes;
+  const size_t total_procs_size = static_cast<size_t>(total_processes);
 
   // процессов больше чем элементов
   if (total_procs_size > element_count) {
