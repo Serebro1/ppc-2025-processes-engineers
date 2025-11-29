@@ -178,7 +178,7 @@ class OtcheskovSElemVecAvgFuncTestsValidation : public ppc::util::BaseRunFuncTes
     }
     ExecuteTaskPipeline();
   }
-  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
+
   void ExecuteTaskPipeline() {
     EXPECT_FALSE(task_->Validation());
     task_->PreProcessing();
