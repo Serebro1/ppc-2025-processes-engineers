@@ -24,6 +24,10 @@ file(
 foreach(sub IN LISTS subdirs)
   if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${sub}" AND NOT sub STREQUAL
                                                            "common")
+    if ("${sub}" MATCHES "_disabled$")
+      list(APPEND LIST_OF_REVERTS "${CMAKE_CURRENT_SOURCE_DIR}_${subd}")
+      continue()
+    endif()
     ppc_configure_subproject(${sub})
   endif()
 endforeach()
