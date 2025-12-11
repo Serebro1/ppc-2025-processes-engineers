@@ -73,7 +73,7 @@ Response OtcheskovSLinearTopologySEQ::SendMessageWithMPICart(const Message &msg)
   MPI_Cart_create(MPI_COMM_WORLD, 1, &dims, &periods, 0, &cart_comm);
 
   int cart_rank;
-  MPI_Cart_rank(cart_comm, &cart_rank);
+  MPI_Comm_rank(cart_comm, &cart_rank);
 
   int left_neighbor, right_neighbor;
   MPI_Cart_shift(cart_comm, 0, 1, &left_neighbor, &right_neighbor);

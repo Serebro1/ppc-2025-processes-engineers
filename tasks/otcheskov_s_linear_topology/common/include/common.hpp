@@ -24,7 +24,7 @@ struct Response {
 
 using InType = Message;
 using OutType = Response;
-using TestType = std::tuple<int, std::string>;
+using TestType = std::tuple<Message, Response>;
 using BaseTask = ppc::task::Task<InType, OutType>;
 
 }  // namespace otcheskov_s_linear_topology
