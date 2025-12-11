@@ -14,7 +14,7 @@ OtcheskovSLinearTopologyMPI::OtcheskovSLinearTopologyMPI(const InType &in) {
   MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank_);
   MPI_Comm_size(MPI_COMM_WORLD, &proc_num_);
 
-  if (proc_rank_ == in.src) {
+  if (in.src == proc_rank_) {
     GetInput() = in;
   }
 
@@ -37,188 +37,123 @@ bool OtcheskovSLinearTopologyMPI::PreProcessingImpl() {
   return true;
 }
 
-void HandleSourceProcess(const Message &msg, int next_hop, Response &response) {
-  const auto &data = msg.data;
-
-  if (msg.src == msg.dest) {
-    response.delivered = true;
-    response.received_data = data;
-    return;
-  }
-
-  if (next_hop == MPI_PROC_NULL) {
-    return;
-  }
-
+void OtcheskovSLinearTopologyMPI::SendData(int dest, const std::vector<int> &data, int tag) {
   int data_size = static_cast<int>(data.size());
-  MPI_Send(&data_size, 1, MPI_INT, next_hop, 0, MPI_COMM_WORLD);
-  MPI_Send(data.data(), data_size, MPI_INT, next_hop, 1, MPI_COMM_WORLD);
+  MPI_Send(&data_size, 1, MPI_INT, dest, tag, MPI_COMM_WORLD);
+  MPI_Send(data.data(), data_size, MPI_INT, dest, tag + 1, MPI_COMM_WORLD);
 }
 
-void HandleIntermediateProcess(int prev_hop, int next_hop, Response &response) {
-  if (prev_hop == MPI_PROC_NULL || next_hop == MPI_PROC_NULL) {
-    return;
-  }
-
+bool OtcheskovSLinearTopologyMPI::RecvData(int src, std::vector<int> &data, int tag) {
   MPI_Status status;
+  int flag = 0;
+  MPI_Iprobe(src, tag, MPI_COMM_WORLD, &flag, &status);
+
+  if (!flag) {
+    return false;
+  }
 
   int data_size;
-  MPI_Recv(&data_size, 1, MPI_INT, prev_hop, 0, MPI_COMM_WORLD, &status);
+  MPI_Recv(&data_size, 1, MPI_INT, src, tag, MPI_COMM_WORLD, &status);
 
-  std::vector<int> data(data_size);
-  MPI_Recv(data.data(), data_size, MPI_INT, prev_hop, 1, MPI_COMM_WORLD, &status);
-
-  if (next_hop != MPI_PROC_NULL) {
-    MPI_Send(&data_size, 1, MPI_INT, next_hop, 0, MPI_COMM_WORLD);
-    MPI_Send(data.data(), data_size, MPI_INT, next_hop, 1, MPI_COMM_WORLD);
-  }
+  data.resize(data_size);
+  MPI_Recv(data.data(), data_size, MPI_INT, src, tag + 1, MPI_COMM_WORLD, &status);
+  return true;
 }
 
-void HandleDestinationProcess(int prev_hop, const Message &msg, Response &response) {
-  MPI_Status status;
-
-  if (msg.src != msg.dest) {
-    int data_size;
-    MPI_Recv(&data_size, 1, MPI_INT, prev_hop, 0, MPI_COMM_WORLD, &status);
-
-    response.received_data.resize(data_size);
-    MPI_Recv(response.received_data.data(), data_size, MPI_INT, prev_hop, 1, MPI_COMM_WORLD, &status);
-  } else {
-    response.received_data = msg.data;
-  }
-
-  response.path.clear();
-  if (msg.src <= msg.dest) {
-    for (int i = msg.src; i <= msg.dest; ++i) {
-      response.path.push_back(i);
-    }
-  } else {
-    for (int i = msg.src; i >= msg.dest; --i) {
-      response.path.push_back(i);
-    }
-  }
-
-  response.delivered = true;
-  response.hops = static_cast<int>(response.path.size()) - 1;
-}
-
-Response OtcheskovSLinearTopologyMPI::SendMessage(const Message &msg) {
+Response OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) {
   Response response;
-  response.original_src = msg.src;
+  response.orig_src = msg.src;
   response.final_dest = msg.dest;
-  response.delivered = false;
-  response.hops = 0;
 
-  int left_neighbor = (proc_rank_ > 0) ? proc_rank_ - 1 : MPI_PROC_NULL;
-  int right_neighbor = (proc_rank_ < proc_num_ - 1) ? proc_rank_ + 1 : MPI_PROC_NULL;
-
-  int direction = 0;
-  if (msg.dest > msg.src) {
-    direction = 1;
-  } else if (msg.dest < msg.src) {
-    direction = -1;
+  // Если отправитель и получатель совпадают
+  if (msg.src == msg.dest) {
+    response.delivered = true;
+    response.received_data = msg.data;
+    response.path = {msg.src};
+    response.hops = 0;
+    return response;
   }
 
-  bool is_on_path = false;
-  if (direction > 0) {
-    is_on_path = (proc_rank_ >= msg.src && proc_rank_ <= msg.dest);
-  } else if (direction < 0) {
-    is_on_path = (proc_rank_ <= msg.src && proc_rank_ >= msg.dest);
+  // Рассчитываем направление и следующий процесс
+  int direction = (msg.dest > msg.src) ? 1 : -1;
+  int next_hop = msg.src + direction;
+
+  // Процесс-отправитель
+  if (proc_rank_ == msg.src) {
+    // Отправляем данные следующему процессу
+    if (next_hop >= 0 && next_hop < proc_num_) {
+      SendData(next_hop, msg.data, 100);
+    }
+  }
+
+  // Промежуточные процессы
+  if (proc_rank_ != msg.src && proc_rank_ != msg.dest) {
+    // Проверяем, находимся ли мы на пути
+    int min_rank = std::min(msg.src, msg.dest);
+    int max_rank = std::max(msg.src, msg.dest);
+
+    if (proc_rank_ > min_rank && proc_rank_ < max_rank) {
+      std::vector<int> data;
+      int prev_hop = proc_rank_ - direction;
+
+      if (RecvData(prev_hop, data, 100)) {
+        next_hop = proc_rank_ + direction;
+        if (next_hop >= 0 && next_hop < proc_num_) {
+          SendData(next_hop, data, 100);
+        }
+      }
+    }
+  }
+
+  if (proc_rank_ == msg.dest) {
+    int prev_hop = msg.dest - direction;
+
+    if (RecvData(prev_hop, response.received_data, 100)) {
+      response.delivered = true;
+
+      int step = (msg.dest > msg.src) ? 1 : -1;
+      for (int i = msg.src; i != msg.dest + step; i += step) {
+        response.path.push_back(i);
+      }
+      response.hops = static_cast<int>(response.path.size()) - 1;
+    } else {
+      response.delivered = false;
+    }
+  }
+
+  return response;
+}
+
+bool OtcheskovSLinearTopologyMPI::RunImpl() {
+  int src = -1, dest = -1;
+
+  if (proc_rank_ == GetInput().src) {
+    src = GetInput().src;
+    dest = GetInput().dest;
+  }
+
+  MPI_Bcast(&src, 1, MPI_INT, GetInput().src, MPI_COMM_WORLD);
+  MPI_Bcast(&dest, 1, MPI_INT, GetInput().src, MPI_COMM_WORLD);
+
+  Message msg;
+  msg.src = src;
+  msg.dest = dest;
+
+  if (proc_rank_ == src) {
+    msg.data = GetInput().data;
   } else {
-    is_on_path = (proc_rank_ == msg.src);
+    msg.data.clear();
   }
 
-  if (!is_on_path) {
-    return response;
+  // Выполняем передачу сообщения
+  Response result = SendMessageLinear(msg);
 
-    if (proc_rank_ == msg.src) {
-      int next_hop = (direction > 0) ? right_neighbor : left_neighbor;
-      HandleSourceProcess(msg, next_hop, response);
-    } else if (proc_rank_ == msg.dest) {
-      int prev_hop = (direction > 0) ? left_neighbor : right_neighbor;
-      HandleDestinationProcess(prev_hop, msg, response);
-    } else {
-      int prev_hop = (direction > 0) ? left_neighbor : right_neighbor;
-      int next_hop = (direction > 0) ? right_neighbor : left_neighbor;
-      HandleIntermediateProcess(prev_hop, next_hop, response);
-    }
+  GetOutput() = result;
+  return true;
+}
 
-    return response;
-  }
-
-  bool OtcheskovSLinearTopologyMPI::RunImpl() {
-    Message msg;
-
-    if (proc_rank_ == GetInput().src) {
-      msg = GetInput();
-    }
-
-    MPI_Bcast(&msg.src, 1, MPI_INT, GetInput().src, MPI_COMM_WORLD);
-    MPI_Bcast(&msg.dest, 1, MPI_INT, GetInput().src, MPI_COMM_WORLD);
-
-    int data_size = static_cast<int>(GetInput().data.size());
-    MPI_Bcast(&data_size, 1, MPI_INT, GetInput().src, MPI_COMM_WORLD);
-
-    msg.data.resize(data_size);
-    MPI_Bcast(msg.data.data(), data_size, MPI_INT, GetInput().src, MPI_COMM_WORLD);
-
-    Response local_response = SendMessage(msg);
-
-    bool delivery_status = false;
-    if (proc_rank_ == msg.dest) {
-      delivery_status = local_response.delivered;
-
-      if (delivery_status && local_response.received_data.empty()) {
-        delivery_status = false;
-      }
-    }
-
-    MPI_Bcast(&delivery_status, 1, MPI_C_BOOL, msg.dest, MPI_COMM_WORLD);
-
-    if (delivery_status) {
-      Response final_response;
-
-      if (proc_rank_ == msg.dest) {
-        final_response = local_response;
-
-        int path_size = static_cast<int>(final_response.path.size());
-        MPI_Bcast(&path_size, 1, MPI_INT, msg.dest, MPI_COMM_WORLD);
-        MPI_Bcast(final_response.path.data(), path_size, MPI_INT, msg.dest, MPI_COMM_WORLD);
-
-        int data_size = static_cast<int>(final_response.received_data.size());
-        MPI_Bcast(&data_size, 1, MPI_INT, msg.dest, MPI_COMM_WORLD);
-        MPI_Bcast(final_response.received_data.data(), data_size, MPI_INT, msg.dest, MPI_COMM_WORLD);
-
-        MPI_Bcast(&final_response.hops, 1, MPI_INT, msg.dest, MPI_COMM_WORLD);
-      } else {
-        int path_size, data_size;
-        MPI_Bcast(&path_size, 1, MPI_INT, msg.dest, MPI_COMM_WORLD);
-        final_response.path.resize(path_size);
-        MPI_Bcast(final_response.path.data(), path_size, MPI_INT, msg.dest, MPI_COMM_WORLD);
-
-        MPI_Bcast(&data_size, 1, MPI_INT, msg.dest, MPI_COMM_WORLD);
-        final_response.received_data.resize(data_size);
-        MPI_Bcast(final_response.received_data.data(), data_size, MPI_INT, msg.dest, MPI_COMM_WORLD);
-
-        MPI_Bcast(&final_response.hops, 1, MPI_INT, msg.dest, MPI_COMM_WORLD);
-
-        final_response.original_src = msg.src;
-        final_response.final_dest = msg.dest;
-        final_response.delivered = true;
-      }
-
-      GetOutput() = final_response;
-    } else {
-      GetOutput().original_src = msg.src;
-      GetOutput().final_dest = msg.dest;
-      GetOutput().delivered = false;
-    }
-
-    return true;
-  }
-
-  bool OtcheskovSLinearTopologyMPI::PostProcessingImpl() {
-    return true;
-  }
+bool OtcheskovSLinearTopologyMPI::PostProcessingImpl() {
+  return true;
+}
 
 }  // namespace otcheskov_s_linear_topology
