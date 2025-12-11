@@ -8,7 +8,7 @@ namespace otcheskov_s_linear_topology {
 class OtcheskovSLinearTopologyMPI : public BaseTask {
  public:
   static constexpr ppc::task::TypeOfTask GetStaticTypeOfTask() {
-    return ppc::task::TypeOfTask::kSEQ;
+    return ppc::task::TypeOfTask::kMPI;
   }
   explicit OtcheskovSLinearTopologyMPI(const InType &in);
 
