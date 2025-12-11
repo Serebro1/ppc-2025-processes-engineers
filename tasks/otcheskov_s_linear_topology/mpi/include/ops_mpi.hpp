@@ -18,9 +18,9 @@ class OtcheskovSLinearTopologyMPI : public BaseTask {
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
-  void SendData(int dest, const std::vector<int> &data, int tag);
-  bool RecvData(int src, std::vector<int> &data, int tag);
-  Response SendMessageLinear(const Message &msg);
+  void SendMessageMPI(int dest, const Message &msg, int tag);
+  Message RecvMessageMPI(int src, int tag);
+  Message SendMessageLinear(const Message &msg);
 
   int proc_rank_{};
   int proc_num_{};

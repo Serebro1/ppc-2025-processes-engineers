@@ -19,13 +19,6 @@ class OtcheskovSLinearTopologySEQ : public BaseTask {
   bool PreProcessingImpl() override;
   bool RunImpl() override;
   bool PostProcessingImpl() override;
-
-  void SendData(int next_hop, const std::vector<int> &data, MPI_Comm comm);
-  std::vector<int> RecvData(int prev_hop, MPI_Comm comm);
-  Response SendMessageWithMPICart(const Message &msg);
-
-  int proc_rank_{};
-  int proc_num_{};
 };
 
 }  // namespace otcheskov_s_linear_topology
