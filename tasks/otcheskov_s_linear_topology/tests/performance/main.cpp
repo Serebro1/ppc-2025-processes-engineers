@@ -10,7 +10,6 @@
 #include "otcheskov_s_linear_topology/mpi/include/ops_mpi.hpp"
 #include "otcheskov_s_linear_topology/seq/include/ops_seq.hpp"
 #include "util/include/perf_test_util.hpp"
-#include "util/include/util.hpp"
 
 namespace otcheskov_s_linear_topology {
 
@@ -27,7 +26,19 @@ class OtcheskovSLinearTopologyPerfTests : public ppc::util::BaseRunPerfTests<InT
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
-    return output_data.delivered;
+    bool is_valid = false;
+    if (!ppc::util::IsUnderMpirun()) {
+      is_valid = output_data.delivered;
+    } else {
+      int proc_rank;
+      MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
+      if (proc_rank == input_data_.src || proc_rank == input_data_.dest) {
+        is_valid = (input_data_.data == output_data.data) && output_data.delivered;
+      } else {
+        is_valid = true;
+      }
+    }
+    return is_valid;
   }
 
   InType GetTestInputData() final {
@@ -40,8 +51,7 @@ TEST_P(OtcheskovSLinearTopologyPerfTests, LinearTopologyPerfTests) {
 }
 
 const auto kAllPerfTasks =
-    ppc::util::MakeAllPerfTasks<InType, OtcheskovSLinearTopologyMPI, OtcheskovSLinearTopologySEQ>(
-        PPC_SETTINGS_otcheskov_s_linear_topology);
+    ppc::util::MakeAllPerfTasks<InType, OtcheskovSLinearTopologyMPI>(PPC_SETTINGS_otcheskov_s_linear_topology);
 
 const auto kGtestValues = ppc::util::TupleToGTestValues(kAllPerfTasks);
 

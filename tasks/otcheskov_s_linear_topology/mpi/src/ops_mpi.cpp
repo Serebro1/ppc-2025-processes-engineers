@@ -96,6 +96,7 @@ Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) {
 
     int next = proc_rank_ + direction;
     SendMessageMPI(next, received, 100);
+    received.data.clear();
   }
 
   if (proc_rank_ == msg.dest) {
@@ -113,11 +114,9 @@ Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) {
 
     int prev = proc_rank_ - direction;
     SendMessageMPI(prev, confirmation, 200);
-  } else {
-    result.delivered = true;  // процессы, не участвующие в передаче сообщения
+    confirmation.data.clear();
   }
 
-  // Источник получает подтверждение
   if (proc_rank_ == msg.src) {
     int next = proc_rank_ + direction;
     result = RecvMessageMPI(next, 200);

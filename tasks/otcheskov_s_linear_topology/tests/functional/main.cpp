@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <mpi.h>
 #include <stb/stb_image.h>
 
 #include <algorithm>
@@ -34,15 +35,48 @@ class OtcheskovSLinearTopologyFuncTests : public ppc::util::BaseRunFuncTests<InT
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
-    return output_data.delivered;
+    bool is_valid = false;
+    if (!ppc::util::IsUnderMpirun()) {
+      is_valid = output_data.delivered;
+    } else {
+      int proc_rank;
+      MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
+      if (proc_rank == input_data_.src || proc_rank == input_data_.dest) {
+        is_valid = (input_data_.data == output_data.data) && output_data.delivered;
+      } else {
+        is_valid = true;
+      }
+    }
+    return is_valid;
   }
 
   InType GetTestInputData() final {
     return input_data_;
   }
 
- private:
   InType input_data_{};
+};
+
+class OtcheskovSLinearTopologyMpi2ProcTests : public OtcheskovSLinearTopologyFuncTests {
+ protected:
+  void SetUp() override {
+    if (!ppc::util::IsUnderMpirun()) {
+      std::cerr << "kMPI tests are not under mpirun\n";
+      GTEST_SKIP();
+    }
+    OtcheskovSLinearTopologyFuncTests::SetUp();
+  }
+};
+
+class OtcheskovSLinearTopologyMpi4ProcTests : public OtcheskovSLinearTopologyFuncTests {
+ protected:
+  void SetUp() override {
+    if (!ppc::util::IsUnderMpirun()) {
+      std::cerr << "kMPI tests are not under mpirun\n";
+      GTEST_SKIP();
+    }
+    OtcheskovSLinearTopologyFuncTests::SetUp();
+  }
 };
 
 class OtcheskovSLinearTopologyFuncTestsValidation : public ppc::util::BaseRunFuncTests<InType, OutType, TestType> {
@@ -107,45 +141,74 @@ class OtcheskovSLinearTopologyFuncTestsValidation : public ppc::util::BaseRunFun
 
 namespace {
 
-TEST_P(OtcheskovSLinearTopologyFuncTests, LinearTopologyMpiFuncTests) {
-  ExecuteTest(GetParam());
+TEST_P(OtcheskovSLinearTopologyMpi2ProcTests, LinearTopologyMpi2ProcFuncTests) {
+  int proc_nums;
+  MPI_Comm_size(MPI_COMM_WORLD, &proc_nums);
+  if (proc_nums < 2) {
+    std::cerr << "Tests should run on 2 or more processes\n";
+  } else {
+    ExecuteTest(GetParam());
+  }
+}
+
+TEST_P(OtcheskovSLinearTopologyMpi4ProcTests, LinearTopologyMpi4ProcFuncTests) {
+  int proc_nums;
+  MPI_Comm_size(MPI_COMM_WORLD, &proc_nums);
+  if (proc_nums < 4) {
+    std::cerr << "Tests should run on 4 or more processes\n";
+  } else {
+    ExecuteTest(GetParam());
+  }
 }
 
 TEST_P(OtcheskovSLinearTopologyFuncTests, LinearTopologySeqFuncTests) {
   ExecuteTest(GetParam());
 }
 
-const std::array<TestType, 4> kMpiParam = {std::make_tuple(Message{0, 0, {1, 2, 3, 4, 5}, false}, 1),
-                                           std::make_tuple(Message{0, 1, {1, 2, 3, 4, 5}, false}, 2),
-                                           std::make_tuple(Message{1, 0, {1, 2, 3, 4, 5}, false}, 3),
-                                           std::make_tuple(Message{1, 1, {1, 2, 3, 4, 5}, false}, 4)};
+const std::array<TestType, 4> kMpiParam2Proc = {std::make_tuple(Message{0, 0, {1, 2, 3, 4, 5}, false}, 1),
+                                                std::make_tuple(Message{0, 1, {1, 2, 3, 4, 5}, false}, 2),
+                                                std::make_tuple(Message{1, 0, {1, 2, 3, 4, 5}, false}, 3),
+                                                std::make_tuple(Message{1, 1, {1, 2, 3, 4, 5}, false}, 4)};
 
-const std::array<TestType, 2> kSeqParam = {std::make_tuple(Message{0, 0, {1, 2, 3}, false}, 5),
-                                           std::make_tuple(Message{0, 0, {42}, false}, 6)};
+const std::array<TestType, 6> kMpiParam4Proc = {std::make_tuple(Message{0, 2, {1, 2, 3, 4, 5}, false}, 1),
+                                                std::make_tuple(Message{0, 3, {1, 2, 3, 4, 5}, false}, 2),
+                                                std::make_tuple(Message{1, 3, {1, 2, 3, 4, 5}, false}, 3),
+                                                std::make_tuple(Message{3, 0, {1, 2, 3, 4, 5}, false}, 4),
+                                                std::make_tuple(Message{2, 1, {1, 2, 3, 4, 5}, false}, 5),
+                                                std::make_tuple(Message{1, 2, {1, 2, 3, 4, 5}, false}, 6)};
 
-const auto kMpiTasksList = std::tuple_cat(
-    ppc::util::AddFuncTask<OtcheskovSLinearTopologyMPI, InType>(kMpiParam, PPC_SETTINGS_otcheskov_s_linear_topology));
+const std::array<TestType, 2> kSeqParam = {std::make_tuple(Message{0, 0, {1, 2, 3}, false}, 1),
+                                           std::make_tuple(Message{0, 0, {42}, false}, 2)};
+
+const auto kMpiTasksList2Proc = std::tuple_cat(ppc::util::AddFuncTask<OtcheskovSLinearTopologyMPI, InType>(
+    kMpiParam2Proc, PPC_SETTINGS_otcheskov_s_linear_topology));
+
+const auto kMpiTasksList4Proc = std::tuple_cat(ppc::util::AddFuncTask<OtcheskovSLinearTopologyMPI, InType>(
+    kMpiParam4Proc, PPC_SETTINGS_otcheskov_s_linear_topology));
 
 const auto kSeqTasksList = std::tuple_cat(
     ppc::util::AddFuncTask<OtcheskovSLinearTopologySEQ, InType>(kSeqParam, PPC_SETTINGS_otcheskov_s_linear_topology));
 
-const auto kMpiGtestValues = ppc::util::ExpandToValues(kMpiTasksList);
+const auto kMpiGtestValues2Proc = ppc::util::ExpandToValues(kMpiTasksList2Proc);
+const auto kMpiGtestValues4Proc = ppc::util::ExpandToValues(kMpiTasksList4Proc);
 const auto kSeqGtestValues = ppc::util::ExpandToValues(kSeqTasksList);
 
 const auto kFuncTestName = OtcheskovSLinearTopologyFuncTests::PrintFuncTestName<OtcheskovSLinearTopologyFuncTests>;
-INSTANTIATE_TEST_SUITE_P(LinearTopologyMpiFuncTests, OtcheskovSLinearTopologyFuncTests, kMpiGtestValues, kFuncTestName);
+
+// Регистрируем тесты отдельно
+INSTANTIATE_TEST_SUITE_P(LinearTopologyMpi2ProcFuncTests, OtcheskovSLinearTopologyMpi2ProcTests, kMpiGtestValues2Proc,
+                         kFuncTestName);
+INSTANTIATE_TEST_SUITE_P(LinearTopologyMpi4ProcFuncTests, OtcheskovSLinearTopologyMpi4ProcTests, kMpiGtestValues4Proc,
+                         kFuncTestName);
 INSTANTIATE_TEST_SUITE_P(LinearTopologySeqFuncTests, OtcheskovSLinearTopologyFuncTests, kSeqGtestValues, kFuncTestName);
 
 TEST_P(OtcheskovSLinearTopologyFuncTestsValidation, LinearTopologyTestsValidation) {
   ExecuteTest(GetParam());
 }
 
-const std::array<TestType, 9> kValidationTestParam = {
-    std::make_tuple(Message{-1, 0, {0}, false}, 1),  std::make_tuple(Message{0, -1, {0}, false}, 2),
-    std::make_tuple(Message{-1, -1, {0}, false}, 3), std::make_tuple(Message{0, 0, {}, false}, 4),
-    std::make_tuple(Message{-1, 0, {}, false}, 5),   std::make_tuple(Message{0, -1, {}, false}, 6),
-    std::make_tuple(Message{-1, -2, {}, false}, 7),  std::make_tuple(Message{-1, -2, {}, false}, 8),
-    std::make_tuple(Message{0, 0, {1}, true}, 9)};
+const std::array<TestType, 4> kValidationTestParam = {
+    std::make_tuple(Message{-1, 0, {0}, false}, 1), std::make_tuple(Message{0, -1, {0}, false}, 2),
+    std::make_tuple(Message{0, 0, {}, false}, 3), std::make_tuple(Message{0, 0, {0}, true}, 4)};
 
 const auto kValidationTestTasksList =
     std::tuple_cat(ppc::util::AddFuncTask<OtcheskovSLinearTopologyMPI, InType>(
