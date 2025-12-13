@@ -54,17 +54,17 @@ void OtcheskovSLinearTopologyMPI::SendMessageMPI(int dest, const Message &msg, i
 }
 
 Message OtcheskovSLinearTopologyMPI::RecvMessageMPI(int src, int tag) {
-  MessageHeader header;
+  MessageHeader header{};
   MPI_Status status;
   MPI_Recv(&header, sizeof(MessageHeader), MPI_BYTE, src, tag, MPI_COMM_WORLD, &status);
 
-  Message msg;
+  Message msg{};
   msg.delivered = header.delivered;
   msg.src = header.src;
   msg.dest = header.dest;
   if (header.data_size > 0) {
     msg.data.resize(header.data_size);
-    MPI_Recv(msg.data.data(), header.data_size, MPI_INT, status.MPI_SOURCE, tag + 1, MPI_COMM_WORLD, &status);
+    MPI_Recv(msg.data.data(), header.data_size, MPI_INT, src, tag + 1, MPI_COMM_WORLD, &status);
   } else {
     msg.data.clear();
     msg.data.shrink_to_fit();
@@ -138,7 +138,7 @@ bool OtcheskovSLinearTopologyMPI::RunImpl() {
     return false;
   }
 
-  Message msg;
+  Message msg{};
   msg.src = src;
   msg.dest = dest;
   msg.delivered = false;
