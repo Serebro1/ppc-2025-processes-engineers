@@ -205,8 +205,10 @@ TEST_P(OtcheskovSLinearTopologyFuncTestsValidation, LinearTopologyTestsValidatio
 }
 
 const std::array<TestType, 4> kValidationTestParam = {
-    std::make_tuple(Message{-1, 0, {0}, false}, 1), std::make_tuple(Message{0, -1, {0}, false}, 2),
-    std::make_tuple(Message{0, 0, {}, false}, 3), std::make_tuple(Message{0, 0, {0}, true}, 4)};
+    std::make_tuple(Message{.src = -1, .dest = 0, .data = {0}, .delivered = false}, 1),
+    std::make_tuple(Message{.src = 0, .dest = -1, .data = {0}, .delivered = false}, 2),
+    std::make_tuple(Message{.src = 0, .dest = 0, .data = {}, .delivered = false}, 3),
+    std::make_tuple(Message{.src = 0, .dest = 0, .data = {0}, .delivered = true}, 4)};
 
 const auto kValidationTestTasksList =
     std::tuple_cat(ppc::util::AddFuncTask<OtcheskovSLinearTopologyMPI, InType>(
