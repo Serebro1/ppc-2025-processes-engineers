@@ -45,7 +45,6 @@ runs:
           for exclude_dir in ${{ inputs.exclude }}; do
             CHANGED_FILES=$(echo "$CHANGED_FILES" | grep -v "^./${exclude_dir}/" || true)
           done
-          CHANGED_FILES=$(echo "$CHANGED_FILES" | grep -v "_disabled/" || true)
         else
           # Only analyze changed source files
           CHANGED_FILES=$(git diff --name-only \
@@ -55,7 +54,6 @@ runs:
           for exclude_dir in ${{ inputs.exclude }}; do
             CHANGED_FILES=$(echo "$CHANGED_FILES" | grep -v "^${exclude_dir}/" || true)
           done
-          CHANGED_FILES=$(echo "$CHANGED_FILES" | grep -v "_disabled/" || true)
         fi
 
         echo "changed_files<<EOF" >> $GITHUB_OUTPUT
