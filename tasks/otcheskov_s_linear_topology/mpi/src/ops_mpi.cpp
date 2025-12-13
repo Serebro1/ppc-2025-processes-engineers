@@ -15,6 +15,7 @@ OtcheskovSLinearTopologyMPI::OtcheskovSLinearTopologyMPI(const InType &in) {
   GetInput() = in;
   if (proc_rank_ != in.src) {
     GetInput().data.clear();
+    GetInput().data.shrink_to_fit();
   }
   GetOutput() = {};
 }
@@ -39,33 +40,43 @@ bool OtcheskovSLinearTopologyMPI::PreProcessingImpl() {
 }
 
 void OtcheskovSLinearTopologyMPI::SendMessageMPI(int dest, const Message &msg, int tag) {
-  MPI_Send(&msg.delivered, 1, MPI_C_BOOL, dest, tag, MPI_COMM_WORLD);
-  MPI_Send(&msg.src, 1, MPI_INT, dest, tag + 1, MPI_COMM_WORLD);
-  MPI_Send(&msg.dest, 1, MPI_INT, dest, tag + 2, MPI_COMM_WORLD);
+  struct MessageHeader {
+    bool delivered;
+    int src;
+    int dest;
+    int data_size;
+  } header;
+  header.delivered = msg.delivered;
+  header.src = msg.src;
+  header.dest = msg.dest;
+  header.data_size = static_cast<int>(msg.data.size());
+  MPI_Send(&header, sizeof(MessageHeader), MPI_BYTE, dest, tag, MPI_COMM_WORLD);
 
-  int data_size = static_cast<int>(msg.data.size());
-  MPI_Send(&data_size, 1, MPI_INT, dest, tag + 3, MPI_COMM_WORLD);
-  if (data_size > 0) {
-    MPI_Send(msg.data.data(), data_size, MPI_INT, dest, tag + 4, MPI_COMM_WORLD);
+  if (header.data_size > 0) {
+    MPI_Send(msg.data.data(), header.data_size, MPI_INT, dest, tag + 1, MPI_COMM_WORLD);
   }
 }
 
 Message OtcheskovSLinearTopologyMPI::RecvMessageMPI(int src, int tag) {
   Message msg;
   MPI_Status status;
-  MPI_Recv(&msg.delivered, 1, MPI_C_BOOL, src, tag, MPI_COMM_WORLD, &status);
-  MPI_Recv(&msg.src, 1, MPI_INT, src, tag + 1, MPI_COMM_WORLD, &status);
-  MPI_Recv(&msg.dest, 1, MPI_INT, src, tag + 2, MPI_COMM_WORLD, &status);
-
-  int data_size;
-  MPI_Recv(&data_size, 1, MPI_INT, src, tag + 3, MPI_COMM_WORLD, &status);
-  if (data_size > 0) {
-    msg.data.resize(data_size);
-    MPI_Recv(msg.data.data(), data_size, MPI_INT, src, tag + 4, MPI_COMM_WORLD, &status);
+  struct MessageHeader {
+    bool delivered;
+    int src;
+    int dest;
+    int data_size;
+  } header;
+  MPI_Recv(&header, sizeof(MessageHeader), MPI_BYTE, src, tag, MPI_COMM_WORLD, &status);
+  msg.delivered = header.delivered;
+  msg.src = header.src;
+  msg.dest = header.dest;
+  if (header.data_size > 0) {
+    msg.data.resize(header.data_size);
+    MPI_Recv(msg.data.data(), header.data_size, MPI_INT, status.MPI_SOURCE, tag + 1, MPI_COMM_WORLD, &status);
   } else {
     msg.data.clear();
+    msg.data.shrink_to_fit();
   }
-
   return msg;
 }
 
@@ -97,6 +108,7 @@ Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) {
     int next = proc_rank_ + direction;
     SendMessageMPI(next, received, 100);
     received.data.clear();
+    received.data.shrink_to_fit();
   }
 
   if (proc_rank_ == msg.dest) {
@@ -115,6 +127,7 @@ Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) {
     int prev = proc_rank_ - direction;
     SendMessageMPI(prev, confirmation, 200);
     confirmation.data.clear();
+    confirmation.data.shrink_to_fit();
   }
 
   if (proc_rank_ == msg.src) {
@@ -126,9 +139,9 @@ Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) {
 }
 
 bool OtcheskovSLinearTopologyMPI::RunImpl() {
-  int src, dest;
-  src = GetInput().src;
-  dest = GetInput().dest;
+  const int src = GetInput().src;
+  const int dest = GetInput().dest;
+
   if (src < 0 || src >= proc_num_) {
     return false;
   }
@@ -137,11 +150,9 @@ bool OtcheskovSLinearTopologyMPI::RunImpl() {
   msg.src = src;
   msg.dest = dest;
   msg.delivered = false;
-
+  msg.data = {};
   if (proc_rank_ == src) {
     msg.data = GetInput().data;
-  } else {
-    msg.data.clear();
   }
 
   Message result_msg = SendMessageLinear(msg);
@@ -160,6 +171,10 @@ bool OtcheskovSLinearTopologyMPI::RunImpl() {
 }
 
 bool OtcheskovSLinearTopologyMPI::PostProcessingImpl() {
+  if (!GetInput().data.empty()) {
+    GetInput().data.clear();
+    GetInput().data.shrink_to_fit();
+  }
   return true;
 }
 
