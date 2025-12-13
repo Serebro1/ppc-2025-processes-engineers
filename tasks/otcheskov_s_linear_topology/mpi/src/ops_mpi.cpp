@@ -15,10 +15,6 @@ OtcheskovSLinearTopologyMPI::OtcheskovSLinearTopologyMPI(const InType &in) {
   MPI_Comm_size(MPI_COMM_WORLD, &proc_num_);
 
   GetInput() = in;
-  if (proc_rank_ != in.src) {
-    GetInput().data.clear();
-    GetInput().data.shrink_to_fit();
-  }
 }
 
 bool OtcheskovSLinearTopologyMPI::ValidationImpl() {
@@ -54,20 +50,17 @@ void OtcheskovSLinearTopologyMPI::SendMessageMPI(int dest, const Message &msg, i
 }
 
 Message OtcheskovSLinearTopologyMPI::RecvMessageMPI(int src, int tag) {
-  MessageHeader header{};
+  MessageHeader header;
   MPI_Status status;
   MPI_Recv(&header, sizeof(MessageHeader), MPI_BYTE, src, tag, MPI_COMM_WORLD, &status);
 
-  Message msg{};
+  Message msg;
   msg.delivered = header.delivered;
   msg.src = header.src;
   msg.dest = header.dest;
   if (header.data_size > 0) {
     msg.data.resize(header.data_size);
     MPI_Recv(msg.data.data(), header.data_size, MPI_INT, src, tag + 1, MPI_COMM_WORLD, &status);
-  } else {
-    msg.data.clear();
-    msg.data.shrink_to_fit();
   }
   return msg;
 }
@@ -99,8 +92,6 @@ Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) const
 
     int next = proc_rank_ + direction;
     SendMessageMPI(next, received, 100);
-    received.data.clear();
-    received.data.shrink_to_fit();
   }
 
   if (proc_rank_ == msg.dest) {
@@ -118,8 +109,6 @@ Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) const
 
     int prev = proc_rank_ - direction;
     SendMessageMPI(prev, confirmation, 200);
-    confirmation.data.clear();
-    confirmation.data.shrink_to_fit();
   }
 
   if (proc_rank_ == msg.src) {
@@ -138,7 +127,7 @@ bool OtcheskovSLinearTopologyMPI::RunImpl() {
     return false;
   }
 
-  Message msg{};
+  Message msg;
   msg.src = src;
   msg.dest = dest;
   msg.delivered = false;
@@ -163,10 +152,6 @@ bool OtcheskovSLinearTopologyMPI::RunImpl() {
 }
 
 bool OtcheskovSLinearTopologyMPI::PostProcessingImpl() {
-  if (!GetInput().data.empty()) {
-    GetInput().data.clear();
-    GetInput().data.shrink_to_fit();
-  }
   return true;
 }
 
