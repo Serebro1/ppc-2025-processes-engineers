@@ -72,7 +72,7 @@ Message OtcheskovSLinearTopologyMPI::RecvMessageMPI(int src, int tag) {
   return msg;
 }
 
-Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) {
+Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) const {
   Message result = msg;
   result.delivered = false;
 

@@ -121,13 +121,10 @@ class OtcheskovSLinearTopologyFuncTestsValidation : public ppc::util::BaseRunFun
 
  private:
   static std::string FormatNumber(int value) {
-    std::stringstream ss;
-    ss << value;
-    std::string str = ss.str();
-    if (value < 0) {
-      str = "minus_" + str.substr(1, str.size());
+    if (value >= 0) {
+      return std::to_string(value);
     }
-    return str;
+    return "minus_" + std::to_string(-value);
   }
 
   InType input_data_;
@@ -193,7 +190,6 @@ const auto kSeqGtestValues = ppc::util::ExpandToValues(kSeqTasksList);
 
 const auto kFuncTestName = OtcheskovSLinearTopologyFuncTests::PrintFuncTestName<OtcheskovSLinearTopologyFuncTests>;
 
-// Регистрируем тесты отдельно
 INSTANTIATE_TEST_SUITE_P(LinearTopologyMpi2ProcFuncTests, OtcheskovSLinearTopologyMpi2ProcTests, kMpiGtestValues2Proc,
                          kFuncTestName);
 INSTANTIATE_TEST_SUITE_P(LinearTopologyMpi4ProcFuncTests, OtcheskovSLinearTopologyMpi4ProcTests, kMpiGtestValues4Proc,

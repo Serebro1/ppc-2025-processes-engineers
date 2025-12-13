@@ -17,7 +17,7 @@ struct MessageHeader {
 struct Message {
   int src{};
   int dest{};
-  std::vector<int> data{};
+  std::vector<int> data;
   bool delivered{};
 };
 

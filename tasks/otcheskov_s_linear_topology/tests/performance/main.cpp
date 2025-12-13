@@ -2,6 +2,7 @@
 #include <mpi.h>
 
 #include <cmath>
+#include <cstddef>
 
 #include "otcheskov_s_linear_topology/common/include/common.hpp"
 #include "otcheskov_s_linear_topology/mpi/include/ops_mpi.hpp"
@@ -28,7 +29,7 @@ class OtcheskovSLinearTopologyPerfTests : public ppc::util::BaseRunPerfTests<InT
     if (!ppc::util::IsUnderMpirun()) {
       is_valid = output_data.delivered;
     } else {
-      int proc_rank;
+      int proc_rank{};
       MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
       if (proc_rank == input_data_.src || proc_rank == input_data_.dest) {
         is_valid = (input_data_.data == output_data.data) && output_data.delivered;
