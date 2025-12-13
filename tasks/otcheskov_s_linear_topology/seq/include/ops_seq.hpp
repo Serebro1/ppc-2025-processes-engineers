@@ -1,7 +1,5 @@
 #pragma once
 
-#include <mpi.h>
-
 #include "otcheskov_s_linear_topology/common/include/common.hpp"
 #include "task/include/task.hpp"
 

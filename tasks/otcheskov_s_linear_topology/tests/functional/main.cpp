@@ -2,16 +2,11 @@
 #include <mpi.h>
 #include <stb/stb_image.h>
 
-#include <algorithm>
-#include <array>
 #include <cstddef>
-#include <cstdint>
-#include <numeric>
-#include <stdexcept>
+#include <iostream>
+#include <sstream>
 #include <string>
 #include <tuple>
-#include <utility>
-#include <vector>
 
 #include "otcheskov_s_linear_topology/common/include/common.hpp"
 #include "otcheskov_s_linear_topology/mpi/include/ops_mpi.hpp"
@@ -31,7 +26,7 @@ class OtcheskovSLinearTopologyFuncTests : public ppc::util::BaseRunFuncTests<InT
  protected:
   void SetUp() override {
     TestType params = std::get<static_cast<std::size_t>(ppc::util::GTestParamIndex::kTestParams)>(GetParam());
-    input_data_ = std::get<0>(params);
+    input_data = std::get<0>(params);
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
@@ -39,10 +34,10 @@ class OtcheskovSLinearTopologyFuncTests : public ppc::util::BaseRunFuncTests<InT
     if (!ppc::util::IsUnderMpirun()) {
       is_valid = output_data.delivered;
     } else {
-      int proc_rank;
+      int proc_rank{};
       MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
-      if (proc_rank == input_data_.src || proc_rank == input_data_.dest) {
-        is_valid = (input_data_.data == output_data.data) && output_data.delivered;
+      if (proc_rank == input_data.src || proc_rank == input_data.dest) {
+        is_valid = (input_data.data == output_data.data) && output_data.delivered;
       } else {
         is_valid = true;
       }
@@ -51,10 +46,10 @@ class OtcheskovSLinearTopologyFuncTests : public ppc::util::BaseRunFuncTests<InT
   }
 
   InType GetTestInputData() final {
-    return input_data_;
+    return input_data;
   }
 
-  InType input_data_{};
+  InType input_data{};
 };
 
 class OtcheskovSLinearTopologyMpi2ProcTests : public OtcheskovSLinearTopologyFuncTests {
@@ -142,7 +137,7 @@ class OtcheskovSLinearTopologyFuncTestsValidation : public ppc::util::BaseRunFun
 namespace {
 
 TEST_P(OtcheskovSLinearTopologyMpi2ProcTests, LinearTopologyMpi2ProcFuncTests) {
-  int proc_nums;
+  int proc_nums{};
   MPI_Comm_size(MPI_COMM_WORLD, &proc_nums);
   if (proc_nums < 2) {
     std::cerr << "Tests should run on 2 or more processes\n";
@@ -152,7 +147,7 @@ TEST_P(OtcheskovSLinearTopologyMpi2ProcTests, LinearTopologyMpi2ProcFuncTests) {
 }
 
 TEST_P(OtcheskovSLinearTopologyMpi4ProcTests, LinearTopologyMpi4ProcFuncTests) {
-  int proc_nums;
+  int proc_nums{};
   MPI_Comm_size(MPI_COMM_WORLD, &proc_nums);
   if (proc_nums < 4) {
     std::cerr << "Tests should run on 4 or more processes\n";
@@ -165,20 +160,23 @@ TEST_P(OtcheskovSLinearTopologyFuncTests, LinearTopologySeqFuncTests) {
   ExecuteTest(GetParam());
 }
 
-const std::array<TestType, 4> kMpiParam2Proc = {std::make_tuple(Message{0, 0, {1, 2, 3, 4, 5}, false}, 1),
-                                                std::make_tuple(Message{0, 1, {1, 2, 3, 4, 5}, false}, 2),
-                                                std::make_tuple(Message{1, 0, {1, 2, 3, 4, 5}, false}, 3),
-                                                std::make_tuple(Message{1, 1, {1, 2, 3, 4, 5}, false}, 4)};
+const std::array<TestType, 4> kMpiParam2Proc = {
+    std::make_tuple(Message{.src = 0, .dest = 0, .data = {1, 2, 3, 4, 5}, .delivered = false}, 1),
+    std::make_tuple(Message{.src = 0, .dest = 1, .data = {1, 2, 3, 4, 5}, .delivered = false}, 2),
+    std::make_tuple(Message{.src = 1, .dest = 0, .data = {1, 2, 3, 4, 5}, .delivered = false}, 3),
+    std::make_tuple(Message{.src = 1, .dest = 1, .data = {1, 2, 3, 4, 5}, .delivered = false}, 4)};
 
-const std::array<TestType, 6> kMpiParam4Proc = {std::make_tuple(Message{0, 2, {1, 2, 3, 4, 5}, false}, 1),
-                                                std::make_tuple(Message{0, 3, {1, 2, 3, 4, 5}, false}, 2),
-                                                std::make_tuple(Message{1, 3, {1, 2, 3, 4, 5}, false}, 3),
-                                                std::make_tuple(Message{3, 0, {1, 2, 3, 4, 5}, false}, 4),
-                                                std::make_tuple(Message{2, 1, {1, 2, 3, 4, 5}, false}, 5),
-                                                std::make_tuple(Message{1, 2, {1, 2, 3, 4, 5}, false}, 6)};
+const std::array<TestType, 6> kMpiParam4Proc = {
+    std::make_tuple(Message{.src = 0, .dest = 2, .data = {1, 2, 3, 4, 5}, .delivered = false}, 1),
+    std::make_tuple(Message{.src = 0, .dest = 3, .data = {1, 2, 3, 4, 5}, .delivered = false}, 2),
+    std::make_tuple(Message{.src = 1, .dest = 3, .data = {1, 2, 3, 4, 5}, .delivered = false}, 3),
+    std::make_tuple(Message{.src = 3, .dest = 0, .data = {1, 2, 3, 4, 5}, .delivered = false}, 4),
+    std::make_tuple(Message{.src = 2, .dest = 1, .data = {1, 2, 3, 4, 5}, .delivered = false}, 5),
+    std::make_tuple(Message{.src = 1, .dest = 2, .data = {1, 2, 3, 4, 5}, .delivered = false}, 6)};
 
-const std::array<TestType, 2> kSeqParam = {std::make_tuple(Message{0, 0, {1, 2, 3}, false}, 1),
-                                           std::make_tuple(Message{0, 0, {42}, false}, 2)};
+const std::array<TestType, 2> kSeqParam = {
+    std::make_tuple(Message{.src = 0, .dest = 0, .data = {1, 2, 3}, .delivered = false}, 1),
+    std::make_tuple(Message{.src = 0, .dest = 0, .data = {1}, .delivered = false}, 2)};
 
 const auto kMpiTasksList2Proc = std::tuple_cat(ppc::util::AddFuncTask<OtcheskovSLinearTopologyMPI, InType>(
     kMpiParam2Proc, PPC_SETTINGS_otcheskov_s_linear_topology));

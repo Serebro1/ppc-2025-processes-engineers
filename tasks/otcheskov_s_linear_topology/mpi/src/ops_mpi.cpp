@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <vector>
 
+#include "otcheskov_s_linear_topology/common/include/common.hpp"
+
 namespace otcheskov_s_linear_topology {
 
 OtcheskovSLinearTopologyMPI::OtcheskovSLinearTopologyMPI(const InType &in) {
@@ -17,7 +19,6 @@ OtcheskovSLinearTopologyMPI::OtcheskovSLinearTopologyMPI(const InType &in) {
     GetInput().data.clear();
     GetInput().data.shrink_to_fit();
   }
-  GetOutput() = {};
 }
 
 bool OtcheskovSLinearTopologyMPI::ValidationImpl() {
@@ -40,12 +41,7 @@ bool OtcheskovSLinearTopologyMPI::PreProcessingImpl() {
 }
 
 void OtcheskovSLinearTopologyMPI::SendMessageMPI(int dest, const Message &msg, int tag) {
-  struct MessageHeader {
-    bool delivered;
-    int src;
-    int dest;
-    int data_size;
-  } header;
+  MessageHeader header;
   header.delivered = msg.delivered;
   header.src = msg.src;
   header.dest = msg.dest;
@@ -58,15 +54,11 @@ void OtcheskovSLinearTopologyMPI::SendMessageMPI(int dest, const Message &msg, i
 }
 
 Message OtcheskovSLinearTopologyMPI::RecvMessageMPI(int src, int tag) {
-  Message msg;
+  MessageHeader header;
   MPI_Status status;
-  struct MessageHeader {
-    bool delivered;
-    int src;
-    int dest;
-    int data_size;
-  } header;
   MPI_Recv(&header, sizeof(MessageHeader), MPI_BYTE, src, tag, MPI_COMM_WORLD, &status);
+
+  Message msg;
   msg.delivered = header.delivered;
   msg.src = header.src;
   msg.dest = header.dest;

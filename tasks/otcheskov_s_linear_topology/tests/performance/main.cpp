@@ -1,15 +1,13 @@
 #include <gtest/gtest.h>
+#include <mpi.h>
 
 #include <cmath>
-#include <fstream>
-#include <limits>
-#include <stdexcept>
-#include <string>
 
 #include "otcheskov_s_linear_topology/common/include/common.hpp"
 #include "otcheskov_s_linear_topology/mpi/include/ops_mpi.hpp"
 #include "otcheskov_s_linear_topology/seq/include/ops_seq.hpp"
 #include "util/include/perf_test_util.hpp"
+#include "util/include/util.hpp"
 
 namespace otcheskov_s_linear_topology {
 
@@ -18,7 +16,7 @@ class OtcheskovSLinearTopologyPerfTests : public ppc::util::BaseRunPerfTests<InT
   InType input_data_;
 
   void SetUp() override {
-    input_data_ = {0, 1, {}, false};
+    input_data_ = {.src = 0, .dest = 1, .data = {}, .delivered = false};
     input_data_.data.resize(kDataSize);
     for (int i = 0; i < kDataSize; ++i) {
       input_data_.data[static_cast<std::size_t>(i)] = i;

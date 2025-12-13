@@ -4,7 +4,6 @@
 #include <vector>
 
 #include "otcheskov_s_linear_topology/common/include/common.hpp"
-#include "util/include/util.hpp"
 
 namespace otcheskov_s_linear_topology {
 
