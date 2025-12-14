@@ -11,12 +11,6 @@ namespace otcheskov_s_gauss_filter_vert_split {
 otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::OtcheskovSGaussFilterVertSplitSEQ(
     const InType &in) {
   GetInput() = in;
-
-  const auto &input = GetInput();
-  GetOutput().height = input.height;
-  GetOutput().width = input.width;
-  GetOutput().channels = input.channels;
-  GetOutput().data.resize(input.data.size());
 }
 
 int otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::GetIndex(int row, int col, int channel) {
@@ -25,16 +19,11 @@ int otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::GetI
 
 bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::ValidationImpl() {
   const auto &input = GetInput();
-  if (input.height < 3 || input.width < 3) {
-    return false;
-  }
+  bool is_valid = false;
+  is_valid = input.data.empty() && (input.height < 3 || input.width < 3 || input.channels <= 0) &&
+             (input.data.size() != static_cast<std::size_t>(input.height * input.width * input.channels));
 
-  size_t expected_size = input.height * input.width * input.channels;
-  if (input.data.size() != expected_size) {
-    return false;
-  }
-
-  return true;
+  return is_valid;
 }
 
 bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::PreProcessingImpl() {
@@ -43,32 +32,49 @@ bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::Pre
 
 bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::RunImpl() {
   const auto &input = GetInput();
+  bool is_valid = input.data.empty() && (input.height < 3 || input.width < 3 || input.channels <= 0) &&
+                  (input.data.size() != static_cast<std::size_t>(input.height * input.width * input.channels));
+  if (!is_valid) {
+    return false;
+  }
   auto &output = GetOutput();
-  int channels = input.channels;
+  output.height = input.height;
+  output.width = input.width;
+  output.channels = input.channels;
+  output.data.resize(input.data.size());
 
-  for (int c = 0; c < channels; ++c) {
-    for (int i = 0; i < input.height; ++i) {
-      output.data[GetIndex(i, 0, c)] = input.data[GetIndex(i, 0, c)];
-      output.data[GetIndex(i, input.width - 1, c)] = input.data[GetIndex(i, input.width - 1, c)];
-    }
-    for (int j = 0; j < input.width; ++j) {
-      output.data[GetIndex(0, j, c)] = input.data[GetIndex(0, j, c)];
-      output.data[GetIndex(input.height - 1, j, c)] = input.data[GetIndex(input.height - 1, j, c)];
-    }
-    for (int i = 1; i < input.height - 1; ++i) {
-      for (int j = 1; j < input.width - 1; ++j) {
+  for (int y = 0; y < input.height; ++y) {
+    for (int x = 0; x < input.width; ++x) {
+      for (int c = 0; c < input.channels; ++c) {
         double sum = 0.0;
 
-        // Свёртка с ядром Гаусса для текущего канала
-        for (int ki = -1; ki <= 1; ++ki) {
-          for (int kj = -1; kj <= 1; ++kj) {
-            int idx = GetIndex(i + ki, j + kj, c);
-            sum += input.data[idx] * GAUSSIAN_KERNEL[ki + 1][kj + 1];
+        for (int ky = -1; ky <= 1; ++ky) {
+          for (int kx = -1; kx <= 1; ++kx) {
+            int yk = y + ky;
+            int xk = x + kx;
+
+            if (yk < 0) {
+              yk = -yk - 1;
+            } else if (yk >= input.height) {
+              yk = 2 * input.height - yk - 1;
+            }
+
+            if (xk < 0) {
+              xk = -xk - 1;
+            } else if (xk >= input.width) {
+              xk = 2 * input.width - xk - 1;
+            }
+
+            double weight = GAUSSIAN_KERNEL_3x3[ky + 1][kx + 1];
+
+            int idx = GetIndex(yk, xk, c);
+            sum += weight * input.data[idx];
           }
         }
 
-        output.data[GetIndex(i, j, c)] = static_cast<uint8_t>(std::clamp(sum, 0.0, 255.0));
-        ;
+        // Сохранение результата
+        int outIdx = GetIndex(y, x, c);
+        output.data[outIdx] = static_cast<uint8_t>(std::clamp(sum, 0.0, 255.0));
       }
     }
   }
@@ -76,7 +82,7 @@ bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::Run
 }
 
 bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::PostProcessingImpl() {
-  return false;
+  return true;
 }
 
 }  // namespace otcheskov_s_gauss_filter_vert_split

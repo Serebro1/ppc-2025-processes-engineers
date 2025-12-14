@@ -15,7 +15,7 @@ otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitMPI::Otchesko
     const InType &in) {}
 
 bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitMPI::ValidationImpl() {
-  return tdrue;
+  return true;
 }
 
 bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitMPI::PreProcessingImpl() {
