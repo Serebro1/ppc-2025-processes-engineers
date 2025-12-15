@@ -51,7 +51,7 @@ TEST_P(OtcheskovSLinearTopologyPerfTests, LinearTopologyPerfTests) {
 
 const auto kAllPerfTasks =
     ppc::util::MakeAllPerfTasks<InType, OtcheskovSLinearTopologyMPI, OtcheskovSLinearTopologySEQ>(
-        PC_SETTINGS_otcheskov_s_linear_topology);
+        PPC_SETTINGS_otcheskov_s_linear_topology);
 
 const auto kGtestValues = ppc::util::TupleToGTestValues(kAllPerfTasks);
 
