@@ -10,8 +10,8 @@ namespace otcheskov_s_gauss_filter_vert_split {
 
 otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::OtcheskovSGaussFilterVertSplitSEQ(
     const InType &in) {
-  GetInput() = in;
   SetTypeOfTask(GetStaticTypeOfTask());
+  GetInput() = in;
 }
 
 int otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::GetIndex(int row, int col, int channel) {
