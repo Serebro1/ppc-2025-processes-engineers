@@ -11,6 +11,7 @@ namespace otcheskov_s_gauss_filter_vert_split {
 otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::OtcheskovSGaussFilterVertSplitSEQ(
     const InType &in) {
   GetInput() = in;
+  SetTypeOfTask(GetStaticTypeOfTask());
 }
 
 int otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::GetIndex(int row, int col, int channel) {
@@ -65,7 +66,7 @@ bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::Run
               xk = 2 * input.width - xk - 1;
             }
 
-            double weight = GAUSSIAN_KERNEL_3x3[ky + 1][kx + 1];
+            double weight = GAUSSIAN_KERNEL[ky + 1][kx + 1];
 
             int idx = GetIndex(yk, xk, c);
             sum += weight * input.data[idx];

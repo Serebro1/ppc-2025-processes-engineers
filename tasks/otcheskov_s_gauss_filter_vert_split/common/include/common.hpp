@@ -20,7 +20,7 @@ using OutType = ImageData;
 using TestType = std::tuple<std::string, double>;  // Придумать
 using BaseTask = ppc::task::Task<InType, OutType>;
 
-constexpr double GAUSSIAN_KERNEL_3x3[3][3] = {
+constexpr double GAUSSIAN_KERNEL[3][3] = {
     {1.0 / 16, 2.0 / 16, 1.0 / 16}, {2.0 / 16, 4.0 / 16, 2.0 / 16}, {1.0 / 16, 2.0 / 16, 1.0 / 16}}
 
 }  // namespace otcheskov_s_gauss_filter_vert_split
