@@ -8,6 +8,7 @@
 namespace otcheskov_s_linear_topology {
 
 OtcheskovSLinearTopologySEQ::OtcheskovSLinearTopologySEQ(const InType &in) {
+  SetTypeOfTask(GetStaticTypeOfTask());
   GetInput() = in;
   GetOutput() = {};
 }
