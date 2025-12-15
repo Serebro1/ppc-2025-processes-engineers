@@ -19,14 +19,14 @@ namespace otcheskov_s_linear_topology {
 class OtcheskovSLinearTopologyFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType, TestType> {
  public:
   static std::string PrintTestParam(const TestType &test_param) {
-    return std::to_string(std::get<0>(test_param).src) + "_" + std::to_string(std::get<0>(test_param).dest) +
+    return std::to_string(std::get<0>(test_param)->src) + "_" + std::to_string(std::get<0>(test_param)->dest) +
            "_process_" + "test_" + std::to_string(std::get<1>(test_param));
   }
 
  protected:
   void SetUp() override {
     TestType params = std::get<static_cast<std::size_t>(ppc::util::GTestParamIndex::kTestParams)>(GetParam());
-    input_data = std::get<0>(params);
+    input_data = *(std::get<0>(params));
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
@@ -77,8 +77,8 @@ class OtcheskovSLinearTopologyMpi4ProcTests : public OtcheskovSLinearTopologyFun
 class OtcheskovSLinearTopologyFuncTestsValidation : public ppc::util::BaseRunFuncTests<InType, OutType, TestType> {
  public:
   static std::string PrintTestParam(const TestType &test_param) {
-    return FormatNumber(std::get<0>(test_param).src) + "_" + FormatNumber(std::get<0>(test_param).dest) + "_process_" +
-           "test_" + std::to_string(std::get<1>(test_param));
+    return FormatNumber(std::get<0>(test_param)->src) + "_" + FormatNumber(std::get<0>(test_param)->dest) +
+           "_process_" + "test_" + std::to_string(std::get<1>(test_param));
   }
 
  protected:
@@ -158,22 +158,22 @@ TEST_P(OtcheskovSLinearTopologyFuncTests, LinearTopologySeqFuncTests) {
 }
 
 const std::array<TestType, 4> kMpiParam2Proc = {
-    std::make_tuple(Message{.src = 0, .dest = 0, .data = {1, 2, 3, 4, 5}, .delivered = false}, 1),
-    std::make_tuple(Message{.src = 0, .dest = 1, .data = {1, 2, 3, 4, 5}, .delivered = false}, 2),
-    std::make_tuple(Message{.src = 1, .dest = 0, .data = {1, 2, 3, 4, 5}, .delivered = false}, 3),
-    std::make_tuple(Message{.src = 1, .dest = 1, .data = {1, 2, 3, 4, 5}, .delivered = false}, 4)};
+    std::make_tuple(new Message{.src = 0, .dest = 0, .data = {1, 2, 3, 4, 5}, .delivered = false}, 1),
+    std::make_tuple(new Message{.src = 0, .dest = 1, .data = {1, 2, 3, 4, 5}, .delivered = false}, 2),
+    std::make_tuple(new Message{.src = 1, .dest = 0, .data = {1, 2, 3, 4, 5}, .delivered = false}, 3),
+    std::make_tuple(new Message{.src = 1, .dest = 1, .data = {1, 2, 3, 4, 5}, .delivered = false}, 4)};
 
 const std::array<TestType, 6> kMpiParam4Proc = {
-    std::make_tuple(Message{.src = 0, .dest = 2, .data = {1, 2, 3, 4, 5}, .delivered = false}, 1),
-    std::make_tuple(Message{.src = 0, .dest = 3, .data = {1, 2, 3, 4, 5}, .delivered = false}, 2),
-    std::make_tuple(Message{.src = 1, .dest = 3, .data = {1, 2, 3, 4, 5}, .delivered = false}, 3),
-    std::make_tuple(Message{.src = 3, .dest = 0, .data = {1, 2, 3, 4, 5}, .delivered = false}, 4),
-    std::make_tuple(Message{.src = 2, .dest = 1, .data = {1, 2, 3, 4, 5}, .delivered = false}, 5),
-    std::make_tuple(Message{.src = 1, .dest = 2, .data = {1, 2, 3, 4, 5}, .delivered = false}, 6)};
+    std::make_tuple(new Message{.src = 0, .dest = 2, .data = {1, 2, 3, 4, 5}, .delivered = false}, 1),
+    std::make_tuple(new Message{.src = 0, .dest = 3, .data = {1, 2, 3, 4, 5}, .delivered = false}, 2),
+    std::make_tuple(new Message{.src = 1, .dest = 3, .data = {1, 2, 3, 4, 5}, .delivered = false}, 3),
+    std::make_tuple(new Message{.src = 3, .dest = 0, .data = {1, 2, 3, 4, 5}, .delivered = false}, 4),
+    std::make_tuple(new Message{.src = 2, .dest = 1, .data = {1, 2, 3, 4, 5}, .delivered = false}, 5),
+    std::make_tuple(new Message{.src = 1, .dest = 2, .data = {1, 2, 3, 4, 5}, .delivered = false}, 6)};
 
 const std::array<TestType, 2> kSeqParam = {
-    std::make_tuple(Message{.src = 0, .dest = 0, .data = {1, 2, 3}, .delivered = false}, 1),
-    std::make_tuple(Message{.src = 0, .dest = 0, .data = {1}, .delivered = false}, 2)};
+    std::make_tuple(new Message{.src = 0, .dest = 0, .data = {1, 2, 3}, .delivered = false}, 1),
+    std::make_tuple(new Message{.src = 0, .dest = 0, .data = {1}, .delivered = false}, 2)};
 
 const auto kMpiTasksList2Proc = std::tuple_cat(ppc::util::AddFuncTask<OtcheskovSLinearTopologyMPI, InType>(
     kMpiParam2Proc, PPC_SETTINGS_otcheskov_s_linear_topology));
@@ -201,10 +201,10 @@ TEST_P(OtcheskovSLinearTopologyFuncTestsValidation, LinearTopologyTestsValidatio
 }
 
 const std::array<TestType, 4> kValidationTestParam = {
-    std::make_tuple(Message{.src = -1, .dest = 0, .data = {0}, .delivered = false}, 1),
-    std::make_tuple(Message{.src = 0, .dest = -1, .data = {0}, .delivered = false}, 2),
-    std::make_tuple(Message{.src = 0, .dest = 0, .data = {}, .delivered = false}, 3),
-    std::make_tuple(Message{.src = 0, .dest = 0, .data = {0}, .delivered = true}, 4)};
+    std::make_tuple(new Message{.src = -1, .dest = 0, .data = {0}, .delivered = false}, 1),
+    std::make_tuple(new Message{.src = 0, .dest = -1, .data = {0}, .delivered = false}, 2),
+    std::make_tuple(new Message{.src = 0, .dest = 0, .data = {}, .delivered = false}, 3),
+    std::make_tuple(new Message{.src = 0, .dest = 0, .data = {0}, .delivered = true}, 4)};
 
 const auto kValidationTestTasksList =
     std::tuple_cat(ppc::util::AddFuncTask<OtcheskovSLinearTopologyMPI, InType>(

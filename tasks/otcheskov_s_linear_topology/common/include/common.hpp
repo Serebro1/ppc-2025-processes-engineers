@@ -23,7 +23,7 @@ struct Message {
 
 using InType = Message;
 using OutType = Message;
-using TestType = std::tuple<Message, int>;
+using TestType = std::tuple<Message *, int>;
 using BaseTask = ppc::task::Task<InType, OutType>;
 
 }  // namespace otcheskov_s_linear_topology
