@@ -8,22 +8,18 @@
 namespace otcheskov_s_linear_topology {
 
 struct MessageHeader {
-  bool delivered{};
+  int delivered{};
   int src{};
   int dest{};
   int data_size{};
 };
 
-struct Message {
-  int src{};
-  int dest{};
-  std::vector<int> data;
-  bool delivered{};
-};
+using MessageData = std::vector<int>;
+using Message = std::pair<MessageHeader, MessageData>;
 
 using InType = Message;
 using OutType = Message;
-using TestType = std::tuple<Message *, int>;
+using TestType = std::tuple<Message, int>;
 using BaseTask = ppc::task::Task<InType, OutType>;
 
 }  // namespace otcheskov_s_linear_topology

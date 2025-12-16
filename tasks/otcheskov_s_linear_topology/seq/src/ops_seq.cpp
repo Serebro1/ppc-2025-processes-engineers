@@ -14,7 +14,10 @@ OtcheskovSLinearTopologySEQ::OtcheskovSLinearTopologySEQ(const InType &in) {
 }
 
 bool OtcheskovSLinearTopologySEQ::ValidationImpl() {
-  return GetInput().src >= 0 && GetInput().dest >= 0 && !GetInput().delivered && !GetInput().data.empty();
+  const auto &header = GetInput().first;
+  const auto &data = GetInput().second;
+  return header.src >= 0 && header.dest >= 0 && !header.delivered && !data.empty() &&
+         static_cast<size_t>(header.data_size) == data.size();
 }
 
 bool OtcheskovSLinearTopologySEQ::PreProcessingImpl() {
@@ -23,7 +26,7 @@ bool OtcheskovSLinearTopologySEQ::PreProcessingImpl() {
 
 bool OtcheskovSLinearTopologySEQ::RunImpl() {
   GetOutput() = GetInput();
-  GetOutput().delivered = true;
+  GetOutput().first.delivered = true;
   return true;
 }
 
