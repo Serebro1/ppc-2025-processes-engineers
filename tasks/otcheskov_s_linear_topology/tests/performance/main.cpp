@@ -31,6 +31,7 @@ class OtcheskovSLinearTopologyPerfTests : public ppc::util::BaseRunPerfTests<InT
     } else {
       int proc_rank{};
       MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
+
       if (proc_rank == input_data_.src || proc_rank == input_data_.dest) {
         is_valid = (input_data_.data == output_data.data) && output_data.delivered;
       } else {
@@ -46,12 +47,21 @@ class OtcheskovSLinearTopologyPerfTests : public ppc::util::BaseRunPerfTests<InT
 };
 
 TEST_P(OtcheskovSLinearTopologyPerfTests, LinearTopologyPerfTests) {
-  ExecuteTest(GetParam());
+  if (!ppc::util::IsUnderMpirun()) {
+    ExecuteTest(GetParam());
+  } else {
+    int proc_nums{};
+    MPI_Comm_size(MPI_COMM_WORLD, &proc_nums);
+    if (proc_nums < 2) {
+      std::cerr << "Tests should run on 2 or more processes\n";
+    } else {
+      ExecuteTest(GetParam());
+    }
+  }
 }
 
 const auto kAllPerfTasks =
-    ppc::util::MakeAllPerfTasks<InType, OtcheskovSLinearTopologyMPI, OtcheskovSLinearTopologySEQ>(
-        PPC_SETTINGS_otcheskov_s_linear_topology);
+    ppc::util::MakeAllPerfTasks<InType, OtcheskovSLinearTopologyMPI>(PPC_SETTINGS_otcheskov_s_linear_topology);
 
 const auto kGtestValues = ppc::util::TupleToGTestValues(kAllPerfTasks);
 
