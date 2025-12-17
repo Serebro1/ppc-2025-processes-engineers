@@ -138,7 +138,7 @@ class OtcheskovSLinearTopologyFuncTestsValidation : public ppc::util::BaseRunFun
 
 namespace {
 
-TEST_P(OtcheskovSLinearTopologyMpi2ProcTests, LinearTopologyMpi2ProcFuncTests) {
+TEST_P(OtcheskovSLinearTopologyMpi2ProcTests, Mpi2ProcsTests) {
   int proc_nums{};
   MPI_Comm_size(MPI_COMM_WORLD, &proc_nums);
   if (proc_nums < 2) {
@@ -148,7 +148,7 @@ TEST_P(OtcheskovSLinearTopologyMpi2ProcTests, LinearTopologyMpi2ProcFuncTests) {
   }
 }
 
-TEST_P(OtcheskovSLinearTopologyMpi4ProcTests, LinearTopologyMpi4ProcFuncTests) {
+TEST_P(OtcheskovSLinearTopologyMpi4ProcTests, Mpi4ProcsTests) {
   int proc_nums{};
   MPI_Comm_size(MPI_COMM_WORLD, &proc_nums);
   if (proc_nums < 4) {
@@ -158,7 +158,7 @@ TEST_P(OtcheskovSLinearTopologyMpi4ProcTests, LinearTopologyMpi4ProcFuncTests) {
   }
 }
 
-TEST_P(OtcheskovSLinearTopologyFuncTests, LinearTopologySeqFuncTests) {
+TEST_P(OtcheskovSLinearTopologyFuncTests, SeqTests) {
   ExecuteTest(GetParam());
 }
 
@@ -198,13 +198,11 @@ const auto kSeqGtestValues = ppc::util::ExpandToValues(kSeqTasksList);
 
 const auto kFuncTestName = OtcheskovSLinearTopologyFuncTests::PrintFuncTestName<OtcheskovSLinearTopologyFuncTests>;
 
-INSTANTIATE_TEST_SUITE_P(LinearTopologyMpi2ProcFuncTests, OtcheskovSLinearTopologyMpi2ProcTests, kMpiGtestValues2Proc,
-                         kFuncTestName);
-INSTANTIATE_TEST_SUITE_P(LinearTopologyMpi4ProcFuncTests, OtcheskovSLinearTopologyMpi4ProcTests, kMpiGtestValues4Proc,
-                         kFuncTestName);
-INSTANTIATE_TEST_SUITE_P(LinearTopologySeqFuncTests, OtcheskovSLinearTopologyFuncTests, kSeqGtestValues, kFuncTestName);
+INSTANTIATE_TEST_SUITE_P(Mpi2ProcsTests, OtcheskovSLinearTopologyMpi2ProcTests, kMpiGtestValues2Proc, kFuncTestName);
+INSTANTIATE_TEST_SUITE_P(Mpi4ProcsTests, OtcheskovSLinearTopologyMpi4ProcTests, kMpiGtestValues4Proc, kFuncTestName);
+INSTANTIATE_TEST_SUITE_P(SeqTests, OtcheskovSLinearTopologyFuncTests, kSeqGtestValues, kFuncTestName);
 
-TEST_P(OtcheskovSLinearTopologyFuncTestsValidation, LinearTopologyTestsValidation) {
+TEST_P(OtcheskovSLinearTopologyFuncTestsValidation, Validation) {
   ExecuteTest(GetParam());
 }
 
