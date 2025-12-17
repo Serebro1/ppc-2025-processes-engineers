@@ -1,6 +1,7 @@
 #include "otcheskov_s_linear_topology/seq/include/ops_seq.hpp"
 
 #include <cmath>
+#include <cstddef>
 #include <vector>
 
 #include "otcheskov_s_linear_topology/common/include/common.hpp"
@@ -16,7 +17,7 @@ OtcheskovSLinearTopologySEQ::OtcheskovSLinearTopologySEQ(const InType &in) {
 bool OtcheskovSLinearTopologySEQ::ValidationImpl() {
   const auto &header = GetInput().first;
   const auto &data = GetInput().second;
-  return header.src >= 0 && header.dest >= 0 && !header.delivered && !data.empty() &&
+  return header.src >= 0 && header.dest >= 0 && header.delivered == 0 && !data.empty() &&
          static_cast<size_t>(header.data_size) == data.size();
 }
 
@@ -26,7 +27,7 @@ bool OtcheskovSLinearTopologySEQ::PreProcessingImpl() {
 
 bool OtcheskovSLinearTopologySEQ::RunImpl() {
   GetOutput() = GetInput();
-  GetOutput().first.delivered = true;
+  GetOutput().first.delivered = 1;
   return true;
 }
 

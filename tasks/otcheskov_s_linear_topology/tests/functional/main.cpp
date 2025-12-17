@@ -1,16 +1,12 @@
 #include <gtest/gtest.h>
 #include <mpi.h>
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <iostream>
-#include <memory>
-#include <sstream>
 #include <string>
 #include <tuple>
 #include <utility>
-#include <vector>
 
 #include "otcheskov_s_linear_topology/common/include/common.hpp"
 #include "otcheskov_s_linear_topology/mpi/include/ops_mpi.hpp"
@@ -41,12 +37,12 @@ class OtcheskovSLinearTopologyFuncTests : public ppc::util::BaseRunFuncTests<InT
 
     bool is_valid = false;
     if (!ppc::util::IsUnderMpirun()) {
-      is_valid = out_header.delivered;
+      is_valid = out_header.delivered != 0;
     } else {
       int proc_rank{};
       MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
       if (proc_rank == in_header.src || proc_rank == in_header.dest) {
-        is_valid = (in_data == out_data) && out_header.delivered;
+        is_valid = (in_data == out_data) && out_header.delivered != 0;
       } else {
         is_valid = true;
       }
@@ -58,7 +54,7 @@ class OtcheskovSLinearTopologyFuncTests : public ppc::util::BaseRunFuncTests<InT
     return input_msg;
   }
 
-  InType input_msg{};
+  InType input_msg;
 };
 
 class OtcheskovSLinearTopologyMpi2ProcTests : public OtcheskovSLinearTopologyFuncTests {
@@ -92,7 +88,7 @@ class OtcheskovSLinearTopologyFuncTestsValidation : public ppc::util::BaseRunFun
 
  protected:
   bool CheckTestOutputData(OutType &output_msg) final {
-    return !output_msg.first.delivered;
+    return output_msg.first.delivered == 0;
   }
 
   InType GetTestInputData() final {
@@ -170,22 +166,22 @@ const MessageData kData5 = {1, 2, 3, 4, 5};
 const MessageData kData1 = {1};
 
 const std::array<TestType, 4> kMpiParam2Proc = {
-    {{{MessageHeader{.delivered = false, .src = 0, .dest = 0, .data_size = 5}, kData5}, 1},
-     {{MessageHeader{.delivered = false, .src = 0, .dest = 1, .data_size = 5}, kData5}, 2},
-     {{MessageHeader{.delivered = false, .src = 1, .dest = 0, .data_size = 5}, kData5}, 3},
-     {{MessageHeader{.delivered = false, .src = 1, .dest = 1, .data_size = 5}, kData5}, 4}}};
+    {{{MessageHeader{.delivered = 0, .src = 0, .dest = 0, .data_size = 5}, kData5}, 1},
+     {{MessageHeader{.delivered = 0, .src = 0, .dest = 1, .data_size = 5}, kData5}, 2},
+     {{MessageHeader{.delivered = 0, .src = 1, .dest = 0, .data_size = 5}, kData5}, 3},
+     {{MessageHeader{.delivered = 0, .src = 1, .dest = 1, .data_size = 5}, kData5}, 4}}};
 
 const std::array<TestType, 6> kMpiParam4Proc = {
-    {{{MessageHeader{.delivered = false, .src = 0, .dest = 2, .data_size = 5}, kData5}, 1},
-     {{MessageHeader{.delivered = false, .src = 0, .dest = 3, .data_size = 5}, kData5}, 2},
-     {{MessageHeader{.delivered = false, .src = 1, .dest = 3, .data_size = 5}, kData5}, 3},
-     {{MessageHeader{.delivered = false, .src = 3, .dest = 0, .data_size = 5}, kData5}, 4},
-     {{MessageHeader{.delivered = false, .src = 2, .dest = 1, .data_size = 5}, kData5}, 5},
-     {{MessageHeader{.delivered = false, .src = 1, .dest = 2, .data_size = 5}, kData5}, 6}}};
+    {{{MessageHeader{.delivered = 0, .src = 0, .dest = 2, .data_size = 5}, kData5}, 1},
+     {{MessageHeader{.delivered = 0, .src = 0, .dest = 3, .data_size = 5}, kData5}, 2},
+     {{MessageHeader{.delivered = 0, .src = 1, .dest = 3, .data_size = 5}, kData5}, 3},
+     {{MessageHeader{.delivered = 0, .src = 3, .dest = 0, .data_size = 5}, kData5}, 4},
+     {{MessageHeader{.delivered = 0, .src = 2, .dest = 1, .data_size = 5}, kData5}, 5},
+     {{MessageHeader{.delivered = 0, .src = 1, .dest = 2, .data_size = 5}, kData5}, 6}}};
 
 const std::array<TestType, 2> kSeqParam = {
-    {{{MessageHeader{.delivered = false, .src = 0, .dest = 0, .data_size = 5}, kData5}, 1},
-     {{MessageHeader{.delivered = false, .src = 0, .dest = 0, .data_size = 1}, kData1}, 2}}};
+    {{{MessageHeader{.delivered = 0, .src = 0, .dest = 0, .data_size = 5}, kData5}, 1},
+     {{MessageHeader{.delivered = 0, .src = 0, .dest = 0, .data_size = 1}, kData1}, 2}}};
 
 const auto kMpiTasksList2Proc = std::tuple_cat(ppc::util::AddFuncTask<OtcheskovSLinearTopologyMPI, InType>(
     kMpiParam2Proc, PPC_SETTINGS_otcheskov_s_linear_topology));
@@ -213,10 +209,10 @@ TEST_P(OtcheskovSLinearTopologyFuncTestsValidation, LinearTopologyTestsValidatio
 }
 
 const std::array<TestType, 4> kValidationTestParam = {{
-    {{MessageHeader{.delivered = false, .src = -1, .dest = 0, .data_size = 1}, kData1}, 1},
-    {{MessageHeader{.delivered = false, .src = 0, .dest = -1, .data_size = 1}, kData1}, 2},
-    {{MessageHeader{.delivered = false, .src = 0, .dest = 0, .data_size = 0}, MessageData{}}, 3},
-    {{MessageHeader{.delivered = true, .src = 0, .dest = 0, .data_size = 1}, kData1}, 4},
+    {{MessageHeader{.delivered = 0, .src = -1, .dest = 0, .data_size = 1}, kData1}, 1},
+    {{MessageHeader{.delivered = 0, .src = 0, .dest = -1, .data_size = 1}, kData1}, 2},
+    {{MessageHeader{.delivered = 0, .src = 0, .dest = 0, .data_size = 0}, MessageData{}}, 3},
+    {{MessageHeader{.delivered = 1, .src = 0, .dest = 0, .data_size = 1}, kData1}, 4},
 }};
 
 const auto kValidationTestTasksList =

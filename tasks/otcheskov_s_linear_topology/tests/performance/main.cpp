@@ -3,10 +3,10 @@
 
 #include <cmath>
 #include <cstddef>
+#include <iostream>
 
 #include "otcheskov_s_linear_topology/common/include/common.hpp"
 #include "otcheskov_s_linear_topology/mpi/include/ops_mpi.hpp"
-#include "otcheskov_s_linear_topology/seq/include/ops_seq.hpp"
 #include "util/include/perf_test_util.hpp"
 #include "util/include/util.hpp"
 
@@ -17,7 +17,7 @@ class OtcheskovSLinearTopologyPerfTests : public ppc::util::BaseRunPerfTests<InT
   InType input_msg_;
 
   void SetUp() override {
-    input_msg_.first = {.delivered = false, .src = 0, .dest = 1, .data_size = 0};
+    input_msg_.first = {.delivered = 0, .src = 0, .dest = 1, .data_size = 0};
     input_msg_.second.resize(kDataSize);
     for (int i = 0; i < kDataSize; ++i) {
       input_msg_.second[static_cast<std::size_t>(i)] = i;
@@ -29,13 +29,13 @@ class OtcheskovSLinearTopologyPerfTests : public ppc::util::BaseRunPerfTests<InT
     const auto &[in_header, in_data] = input_msg_;
     const auto &[out_header, out_data] = output_msg;
     if (!ppc::util::IsUnderMpirun()) {
-      is_valid = out_header.delivered;
+      is_valid = out_header.delivered != 0;
     } else {
       int proc_rank{};
       MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
 
       if (proc_rank == in_header.src || proc_rank == in_header.dest) {
-        is_valid = (in_data == out_data) && out_header.delivered;
+        is_valid = (in_data == out_data) && out_header.delivered != 0;
       } else {
         is_valid = true;
       }

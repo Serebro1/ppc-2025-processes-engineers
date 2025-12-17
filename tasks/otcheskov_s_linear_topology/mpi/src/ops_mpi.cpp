@@ -3,11 +3,19 @@
 #include <mpi.h>
 
 #include <algorithm>
+#include <cstddef>
+#include <utility>
 #include <vector>
 
 #include "otcheskov_s_linear_topology/common/include/common.hpp"
 
 namespace otcheskov_s_linear_topology {
+
+namespace {
+constexpr int kMessageTag = 100;
+constexpr int kConfirmTag = 200;
+constexpr int kDataTagOffset = 1;
+}  // namespace
 
 OtcheskovSLinearTopologyMPI::OtcheskovSLinearTopologyMPI(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
@@ -26,7 +34,7 @@ bool OtcheskovSLinearTopologyMPI::ValidationImpl() {
   bool is_valid = false;
 
   if (proc_rank_ == header.src) {
-    is_valid = (header.dest >= 0 && header.dest < proc_num_ && !header.delivered && !data.empty() &&
+    is_valid = (header.dest >= 0 && header.dest < proc_num_ && header.delivered == 0 && !data.empty() &&
                 static_cast<size_t>(header.data_size) == data.size());
   }
   MPI_Bcast(&is_valid, 1, MPI_C_BOOL, GetInput().first.src, MPI_COMM_WORLD);
@@ -42,7 +50,7 @@ void OtcheskovSLinearTopologyMPI::SendMessageMPI(int dest, const Message &msg, i
   MPI_Send(&header, sizeof(MessageHeader), MPI_BYTE, dest, tag, MPI_COMM_WORLD);
 
   if (header.data_size > 0) {
-    MPI_Send(data.data(), header.data_size, MPI_INT, dest, tag + 1, MPI_COMM_WORLD);
+    MPI_Send(data.data(), header.data_size, MPI_INT, dest, tag + kDataTagOffset, MPI_COMM_WORLD);
   }
 }
 
@@ -54,66 +62,67 @@ Message OtcheskovSLinearTopologyMPI::RecvMessageMPI(int src, int tag) {
   MessageData data;
   if (header.data_size > 0) {
     data.resize(header.data_size);
-    MPI_Recv(data.data(), header.data_size, MPI_INT, src, tag + 1, MPI_COMM_WORLD, &status);
+    MPI_Recv(data.data(), header.data_size, MPI_INT, src, tag + kDataTagOffset, MPI_COMM_WORLD, &status);
   }
-  return {header, data};
+  return {header, std::move(data)};
 }
 
-Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) {
+Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) const {
   auto [header, data] = msg;
-  header.delivered = false;
+  header.delivered = 0;
 
   if (header.src == header.dest) {
     if (proc_rank_ == header.src) {
-      header.delivered = true;
+      header.delivered = 1;
     }
     MPI_Bcast(&header.delivered, 1, MPI_INT, header.src, MPI_COMM_WORLD);
-    return {header, data};
+    return {header, std::move(data)};
   }
 
-  int direction = (header.dest > header.src) ? 1 : -1;
-  int start = std::min(header.src, header.dest);
-  int end = std::max(header.src, header.dest);
+  const int direction = (header.dest > header.src) ? 1 : -1;
+  const int start = std::min(header.src, header.dest);
+  const int end = std::max(header.src, header.dest);
 
   Message current_msg = {header, data};
 
   if (proc_rank_ == header.src) {
-    int next = proc_rank_ + direction;
-    SendMessageMPI(next, current_msg, 100);
+    const int next = proc_rank_ + direction;
+    SendMessageMPI(next, current_msg, kMessageTag);
   }
 
   if (proc_rank_ > start && proc_rank_ < end) {
-    int prev = proc_rank_ - direction;
-    Message received = RecvMessageMPI(prev, 100);
+    const int prev = proc_rank_ - direction;
+    Message received = RecvMessageMPI(prev, kMessageTag);
 
-    int next = proc_rank_ + direction;
-    SendMessageMPI(next, received, 100);
+    const int next = proc_rank_ + direction;
+    SendMessageMPI(next, received, kMessageTag);
     current_msg = received;
   }
 
   if (proc_rank_ == header.dest) {
-    int prev = proc_rank_ - direction;
-    current_msg = RecvMessageMPI(prev, 100);
+    const int prev = proc_rank_ - direction;
+    current_msg = RecvMessageMPI(prev, kMessageTag);
 
-    current_msg.first.delivered = true;
-    SendMessageMPI(prev, current_msg, 200);
+    current_msg.first.delivered = 1;
+    SendMessageMPI(prev, current_msg, kConfirmTag);
   }
 
   // Процессы на обратном пути
   if (proc_rank_ > start && proc_rank_ < end) {
-    int next = proc_rank_ + direction;
-    Message confirmation = RecvMessageMPI(next, 200);
+    const int next = proc_rank_ + direction;
+    Message confirmation = RecvMessageMPI(next, kConfirmTag);
 
-    int prev = proc_rank_ - direction;
-    SendMessageMPI(prev, confirmation, 200);
-    current_msg = confirmation;
-    current_msg.second.clear();
-    current_msg.second.shrink_to_fit();
+    const int prev = proc_rank_ - direction;
+    SendMessageMPI(prev, confirmation, kConfirmTag);
+
+    confirmation.second.clear();
+    confirmation.second.shrink_to_fit();
+    current_msg.second = confirmation.second;
   }
 
   if (proc_rank_ == header.src) {
-    int next = proc_rank_ + direction;
-    current_msg = RecvMessageMPI(next, 200);
+    const int next = proc_rank_ + direction;
+    current_msg = RecvMessageMPI(next, kConfirmTag);
   }
 
   return current_msg;
@@ -131,7 +140,7 @@ bool OtcheskovSLinearTopologyMPI::RunImpl() {
   MessageHeader msg_header;
   msg_header.src = src;
   msg_header.dest = dest;
-  msg_header.delivered = false;
+  msg_header.delivered = 0;
   msg_header.data_size = 0;
 
   MessageData data;
@@ -144,9 +153,9 @@ bool OtcheskovSLinearTopologyMPI::RunImpl() {
 
   bool check_passed = false;
   if (proc_rank_ == src) {
-    check_passed = result_msg.first.delivered && !result_msg.second.empty();
+    check_passed = result_msg.first.delivered != 0 && !result_msg.second.empty();
   } else if (proc_rank_ == dest) {
-    check_passed = !result_msg.second.empty() && result_msg.first.delivered;
+    check_passed = !result_msg.second.empty() && result_msg.first.delivered != 0;
   } else {
     check_passed = true;
   }
