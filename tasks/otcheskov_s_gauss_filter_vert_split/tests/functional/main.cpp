@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <mpi.h>
 #include <stb/stb_image.h>
 #include <stb/stb_image_write.h>
 
@@ -21,6 +22,16 @@
 
 namespace otcheskov_s_gauss_filter_vert_split {
 namespace {
+inline int mirrorCoord(int coord, int max) {
+  if (coord < 0) {
+    return -coord - 1;
+  }
+  if (coord >= max) {
+    return 2 * max - coord - 1;
+  }
+  return coord;
+}
+
 InType ApplyGaussianFilter(const InType &input) {
   const auto &[data, height, width, channels] = input;
   OutType output;
@@ -29,38 +40,29 @@ InType ApplyGaussianFilter(const InType &input) {
   output.width = width;
   output.channels = channels;
 
-  for (int y = 1; y < height - 1; ++y) {
-    for (int x = 1; x < width - 1; ++x) {
+  if (height < 3 || width < 3) {
+    output.data = data;
+    return output;
+  }
+
+  for (int y = 0; y < height; ++y) {
+    for (int x = 0; x < width; ++x) {
       for (int c = 0; c < channels; ++c) {
         double sum = 0.0;
+
         for (int ky = -1; ky <= 1; ++ky) {
           for (int kx = -1; kx <= 1; ++kx) {
-            int idx = ((y + ky) * width + (x + kx)) * channels + c;
+            int ny = mirrorCoord(y + ky, height);
+            int nx = mirrorCoord(x + kx, width);
+
+            int idx = (ny * width + nx) * channels + c;
             sum += data[idx] * GAUSSIAN_KERNEL[ky + 1][kx + 1];
           }
         }
+
         int out_idx = (y * width + x) * channels + c;
-        output.data[out_idx] = static_cast<uint8_t>(sum + 0.5);
+        output.data[out_idx] = static_cast<uint8_t>(std::clamp(sum, 0.0, 255.0));
       }
-    }
-  }
-
-  for (int x = 0; x < width; ++x) {
-    for (int c = 0; c < channels; ++c) {
-      int top_idx = (0 * width + x) * channels + c;
-      output.data[top_idx] = data[top_idx];
-      int bottom_idx = ((height - 1) * width + x) * channels + c;
-      output.data[bottom_idx] = data[bottom_idx];
-    }
-  }
-
-  for (int y = 1; y < height - 1; ++y) {
-    for (int c = 0; c < channels; ++c) {
-      int left_idx = (y * width + 0) * channels + c;
-      output.data[left_idx] = data[left_idx];
-
-      int right_idx = (y * width + (width - 1)) * channels + c;
-      output.data[right_idx] = data[right_idx];
     }
   }
 
@@ -89,33 +91,33 @@ ImageData CreateGradientImage(int width, int height, int channels) {
   return img;
 }
 
-ImageData LoadRgbImageOrThrow(const std::string &task_id, const std::string &file_name) {
-  int width = -1;
-  int height = -1;
-  int channels_in_file = -1;
+// ImageData LoadRgbImageOrThrow(const std::string &task_id, const std::string &file_name) {
+//   int width = -1;
+//   int height = -1;
+//   int channels_in_file = -1;
 
-  const std::string abs_path = ppc::util::GetAbsoluteTaskPath(task_id, file_name);
-  unsigned char *data = stbi_load(abs_path.c_str(), &width, &height, &channels_in_file, STBI_rgb);
-  if (data == nullptr) {
-    throw std::runtime_error("Failed to load image '" + abs_path + "': " + std::string(stbi_failure_reason()));
-  }
+//   const std::string abs_path = ppc::util::GetAbsoluteTaskPath(task_id, file_name);
+//   unsigned char *data = stbi_load(abs_path.c_str(), &width, &height, &channels_in_file, STBI_rgb);
+//   if (data == nullptr) {
+//     throw std::runtime_error("Failed to load image '" + abs_path + "': " + std::string(stbi_failure_reason()));
+//   }
 
-  ImageData img;
-  img.width = width;
-  img.height = height;
-  img.channels = STBI_rgb;
-  const auto bytes = static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(img.channels);
-  img.data.assign(data, data + bytes);
-  stbi_image_free(data);
-  return img;
-}
+//   ImageData img;
+//   img.width = width;
+//   img.height = height;
+//   img.channels = STBI_rgb;
+//   const auto bytes = static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(img.channels);
+//   img.data.assign(data, data + bytes);
+//   stbi_image_free(data);
+//   return img;
+// }
 
-void save_image_as_jpeg(const std::string &filename, const ImageData &img, int quality = 90) {
-  int success = stbi_write_jpg(filename.c_str(), img.width, img.height, img.channels, img.data.data(), quality);
-  if (!success) {
-    throw std::runtime_error("Failed to save image as JPEG: " + filename);
-  }
-}
+// void save_image_as_jpeg(const std::string &filename, const ImageData &img, int quality = 90) {
+//   int success = stbi_write_jpg(filename.c_str(), img.width, img.height, img.channels, img.data.data(), quality);
+//   if (!success) {
+//     throw std::runtime_error("Failed to save image as JPEG: " + filename);
+//   }
+// }
 
 }  // namespace
 
@@ -186,9 +188,20 @@ class OtcheskovSGaussFilterVertSplitFuncTestsProcesses : public ppc::util::BaseR
     expect_img_ = ApplyGaussianFilter(input_img_);
   }
 
-  bool CheckTestOutputData(OutType &output_data) final {
-    std::cout << (expect_img_.data == output_data.data) << std::endl;
-    return expect_img_ == output_data;
+  bool CheckTestOutputData(OutType &output_img) final {
+    bool checked = false;
+    if (!ppc::util::IsUnderMpirun()) {
+      checked = expect_img_ == output_img;
+    } else {
+      int proc_rank{};
+      MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
+      if (proc_rank == 0) {
+        checked = expect_img_ == output_img;
+      } else {
+        checked = true;
+      }
+    }
+    return checked;
   }
 
   InType GetTestInputData() final {
@@ -249,8 +262,10 @@ const auto kTestValidTasksList = std::tuple_cat(ppc::util::AddFuncTask<Otcheskov
                                                 ppc::util::AddFuncTask<OtcheskovSGaussFilterVertSplitSEQ, InType>(
                                                     kTestValidParam, PPC_SETTINGS_otcheskov_s_gauss_filter_vert_split));
 
-const auto kTestFuncTasksList = std::tuple_cat(ppc::util::AddFuncTask<OtcheskovSGaussFilterVertSplitSEQ, InType>(
-    kTestFuncParam, PPC_SETTINGS_otcheskov_s_gauss_filter_vert_split));
+const auto kTestFuncTasksList = std::tuple_cat(ppc::util::AddFuncTask<OtcheskovSGaussFilterVertSplitMPI, InType>(
+                                                   kTestFuncParam, PPC_SETTINGS_otcheskov_s_gauss_filter_vert_split),
+                                               ppc::util::AddFuncTask<OtcheskovSGaussFilterVertSplitSEQ, InType>(
+                                                   kTestFuncParam, PPC_SETTINGS_otcheskov_s_gauss_filter_vert_split));
 
 const auto kGtestValidValues = ppc::util::ExpandToValues(kTestValidTasksList);
 const auto kGtestFuncValues = ppc::util::ExpandToValues(kTestFuncTasksList);
