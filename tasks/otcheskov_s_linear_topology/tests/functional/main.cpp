@@ -20,7 +20,7 @@ namespace otcheskov_s_linear_topology {
 class OtcheskovSLinearTopologyFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType, TestType> {
  public:
   static std::string PrintTestParam(const TestType &test_param) {
-    return std::to_string(std::get<0>(test_param).first.dest) + "_" +
+    return std::to_string(std::get<0>(test_param).first.src) + "_" +
            std::to_string(std::get<0>(test_param).first.dest) + "_process_" + "test_" +
            std::to_string(std::get<1>(test_param));
   }

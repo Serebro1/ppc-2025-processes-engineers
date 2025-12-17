@@ -76,55 +76,53 @@ Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) const
       header.delivered = 1;
     }
     MPI_Bcast(&header.delivered, 1, MPI_INT, header.src, MPI_COMM_WORLD);
+
+    if (proc_rank_ != header.src) {
+      data.clear();
+    }
     return {header, std::move(data)};
   }
 
   const int direction = (header.dest > header.src) ? 1 : -1;
-  const int start = std::min(header.src, header.dest);
-  const int end = std::max(header.src, header.dest);
-
   Message current_msg = {header, data};
+  const bool shouldParticipate = (direction > 0 && proc_rank_ >= header.src && proc_rank_ <= header.dest) ||
+                                 (direction < 0 && proc_rank_ <= header.src && proc_rank_ >= header.dest);
 
-  if (proc_rank_ == header.src) {
-    const int next = proc_rank_ + direction;
-    SendMessageMPI(next, current_msg, kMessageTag);
+  if (!shouldParticipate) {
+    return {MessageHeader(), MessageData()};
   }
 
-  if (proc_rank_ > start && proc_rank_ < end) {
-    const int prev = proc_rank_ - direction;
-    Message received = RecvMessageMPI(prev, kMessageTag);
+  const bool isSrc = (proc_rank_ == header.src);
+  const bool isDest = (proc_rank_ == header.dest);
 
-    const int next = proc_rank_ + direction;
-    SendMessageMPI(next, received, kMessageTag);
-    current_msg = received;
-  }
+  const int prev = isSrc ? MPI_PROC_NULL : proc_rank_ - direction;
+  const int next = isDest ? MPI_PROC_NULL : proc_rank_ + direction;
 
-  if (proc_rank_ == header.dest) {
-    const int prev = proc_rank_ - direction;
+  if (!isSrc) {
     current_msg = RecvMessageMPI(prev, kMessageTag);
-
-    current_msg.first.delivered = 1;
-    SendMessageMPI(prev, current_msg, kConfirmTag);
+  } else {
+    current_msg = {header, data};
   }
 
-  // Процессы на обратном пути
-  if (proc_rank_ > start && proc_rank_ < end) {
-    const int next = proc_rank_ + direction;
+  if (!isDest) {
+    SendMessageMPI(next, current_msg, kMessageTag);
+  } else {
+    current_msg.first.delivered = 1;
+  }
+
+  // пересылка подтверждения
+  if (isDest) {
+    SendMessageMPI(prev, current_msg, kConfirmTag);
+  } else {
     Message confirmation = RecvMessageMPI(next, kConfirmTag);
 
-    const int prev = proc_rank_ - direction;
-    SendMessageMPI(prev, confirmation, kConfirmTag);
-
-    confirmation.second.clear();
-    confirmation.second.shrink_to_fit();
-    current_msg.second = confirmation.second;
+    if (isSrc) {
+      current_msg.first.delivered = confirmation.first.delivered;
+    } else {
+      SendMessageMPI(prev, confirmation, kConfirmTag);
+      current_msg.second.clear();
+    }
   }
-
-  if (proc_rank_ == header.src) {
-    const int next = proc_rank_ + direction;
-    current_msg = RecvMessageMPI(next, kConfirmTag);
-  }
-
   return current_msg;
 }
 
