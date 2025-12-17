@@ -13,11 +13,18 @@ struct ImageData {
   int height{};
   int width{};
   int channels{};
+
+  bool operator==(const ImageData &other) const {
+    return height == other.height && width == other.width && channels == other.channels && data == other.data;
+  }
+  bool operator!=(const ImageData &other) const {
+    return !(*this == other);
+  }
 };
 
 using InType = ImageData;
 using OutType = ImageData;
-using TestType = std::tuple<std::string, double>;  // Придумать
+using TestType = std::tuple<std::string, InType>;
 using BaseTask = ppc::task::Task<InType, OutType>;
 
 constexpr double GAUSSIAN_KERNEL[3][3] = {

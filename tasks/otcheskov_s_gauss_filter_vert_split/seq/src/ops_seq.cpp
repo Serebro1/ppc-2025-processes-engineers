@@ -21,8 +21,8 @@ int otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::GetI
 bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::ValidationImpl() {
   const auto &input = GetInput();
   bool is_valid = false;
-  is_valid = input.data.empty() && (input.height < 3 || input.width < 3 || input.channels <= 0) &&
-             (input.data.size() != static_cast<std::size_t>(input.height * input.width * input.channels));
+  is_valid = !input.data.empty() && (input.height >= 3 && input.width >= 3 && input.channels > 0) &&
+             (input.data.size() == static_cast<std::size_t>(input.height * input.width * input.channels));
 
   return is_valid;
 }
@@ -33,8 +33,8 @@ bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::Pre
 
 bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::RunImpl() {
   const auto &input = GetInput();
-  bool is_valid = input.data.empty() && (input.height < 3 || input.width < 3 || input.channels <= 0) &&
-                  (input.data.size() != static_cast<std::size_t>(input.height * input.width * input.channels));
+  bool is_valid = !input.data.empty() && (input.height >= 3 && input.width >= 3 && input.channels > 0) &&
+                  (input.data.size() == static_cast<std::size_t>(input.height * input.width * input.channels));
   if (!is_valid) {
     return false;
   }

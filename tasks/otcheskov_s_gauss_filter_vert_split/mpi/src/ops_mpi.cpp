@@ -25,8 +25,8 @@ bool OtcheskovSGaussFilterVertSplitMPI::ValidationImpl() {
   bool is_valid = false;
   if (proc_rank_ == 0) {
     const auto &input = GetInput();
-    is_valid = input.data.empty() && (input.height < 3 || input.width < 3 || input.channels <= 0) &&
-               (input.data.size() != static_cast<std::size_t>(input.height * input.width * input.channels));
+    is_valid = !input.data.empty() && input.height >= 3 && input.width >= 3 && input.channels > 0 &&
+               (input.data.size() == static_cast<std::size_t>(input.height * input.width * input.channels));
   }
   MPI_Bcast(&is_valid, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD);
   return is_valid;
@@ -37,6 +37,7 @@ bool OtcheskovSGaussFilterVertSplitMPI::PreProcessingImpl() {
 }
 
 bool OtcheskovSGaussFilterVertSplitMPI::RunImpl() {
+  BroadcastImgMetadata();
   // 1. Распределение данных по столбцам
   DistributeData();
 
@@ -58,26 +59,47 @@ bool OtcheskovSGaussFilterVertSplitMPI::PostProcessingImpl() {
 int OtcheskovSGaussFilterVertSplitMPI::GetGlobalIndex(int row, int col, int channel) {
   return (row * GetInput().width + col) * GetInput().channels + channel;
 }
-int OtcheskovSGaussFilterVertSplitMPI::GetLocalIndex(int row, int local_col, int channel) {
-  return (row * local_width_ + local_col) * GetInput().channels + channel;
+
+int OtcheskovSGaussFilterVertSplitMPI::GetLocalIndex(int row, int local_col, int channel, int width) {
+  return (row * width + local_col) * GetInput().channels + channel;
 }
-void OtcheskovSGaussFilterVertSplitMPI::DistributeData() {
-  MPI_Bcast(&GetInput().height, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&GetInput().width, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&GetInput().channels, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-  const auto &input = GetInput();
-  int base_cols = input.width / proc_num_;
-  int remainder = input.width % proc_num_;
-
-  local_width_ = base_cols + (proc_rank_ < remainder ? 1 : 0);
-  local_data_count_ = input.height * local_width_ * input.channels;
-
-  start_col_ = 0;
-  for (int i = 0; i < proc_rank_; ++i) {
-    int cols_for_proc = base_cols + (i < remainder ? 1 : 0);
-    start_col_ += cols_for_proc;
+void OtcheskovSGaussFilterVertSplitMPI::BroadcastImgMetadata() {
+  int dims[3];
+  if (proc_rank_ == 0) {
+    dims[0] = GetInput().height;
+    dims[1] = GetInput().width;
+    dims[2] = GetInput().channels;
   }
+  MPI_Bcast(dims, 3, MPI_INT, 0, MPI_COMM_WORLD);
+
+  if (proc_rank_ != 0) {
+    GetInput().height = dims[0];
+    GetInput().width = dims[1];
+    GetInput().channels = dims[2];
+  }
+}
+
+int OtcheskovSGaussFilterVertSplitMPI::CalcColsForProcs(int proc_id, int total_width, int num_procs) {
+  int base_cols = total_width / num_procs;
+  int remainder = total_width % num_procs;
+  return base_cols + (proc_id < remainder ? 1 : 0);
+}
+
+int OtcheskovSGaussFilterVertSplitMPI::CalcStartCol(int proc_id, int total_width, int num_procs) {
+  int start_col = 0;
+  for (int i = 0; i < proc_id; ++i) {
+    start_col += CalcColsForProcs(i, total_width, num_procs);
+  }
+  return start_col;
+}
+
+void OtcheskovSGaussFilterVertSplitMPI::DistributeData() {
+  const auto &input = GetInput();
+
+  // Вычисляем размеры для каждого процесса
+  local_width_ = CalcColsForProcs(proc_rank_, input.width, proc_num_);
+  start_col_ = CalcStartCol(proc_rank_, input.width, proc_num_);
+  local_data_count_ = input.height * local_width_ * input.channels;
 
   if (proc_rank_ == 0) {
     GetOutput().height = input.height;
@@ -85,138 +107,166 @@ void OtcheskovSGaussFilterVertSplitMPI::DistributeData() {
     GetOutput().channels = input.channels;
     GetOutput().data.resize(input.data.size());
 
-    std::vector<std::vector<uint8_t>> send_buffers(proc_num_);
-    std::vector<int> sendcounts(proc_num_, 0);
+    PrepareAndScatterData();
+  } else {
+    ReceiveLocalData();
+  }
+}
 
-    // Вычисляем, сколько столбцов и данных нужно каждому процессу
-    for (int p = 0; p < proc_num_; ++p) {
-      int base_cols = input.width / proc_num_;
-      int remainder = input.width % proc_num_;
-      int cols_for_proc = base_cols + (p < remainder ? 1 : 0);
-      sendcounts[p] = input.height * cols_for_proc * input.channels;
-      send_buffers[p].resize(sendcounts[p]);
-    }
+void OtcheskovSGaussFilterVertSplitMPI::PrepareAndScatterData() {
+  const auto &input = GetInput();
+  std::vector<int> counts(proc_num_);
+  std::vector<int> displs(proc_num_);
+  std::vector<uint8_t> send_buffer;
 
-    // Заполняем буферы для каждого процесса
-    for (int p = 0; p < proc_num_; ++p) {
-      int base_cols = input.width / proc_num_;
-      int remainder = input.width % proc_num_;
-      int cols_for_proc = base_cols + (p < remainder ? 1 : 0);
-      int start_col = 0;
-      // Вычисляем начальный столбец для процесса p
-      for (int i = 0; i < p; ++i) {
-        int proc_cols = base_cols + (i < remainder ? 1 : 0);
-        start_col += proc_cols;
-      }
+  int total_send_size = 0;
+  for (int p = 0; p < proc_num_; ++p) {
+    int cols_for_proc = CalcColsForProcs(p, input.width, proc_num_);
+    counts[p] = input.height * cols_for_proc * input.channels;
+    displs[p] = total_send_size;
+    total_send_size += counts[p];
+  }
 
-      // Копируем данные по столбцам
-      int buf_idx = 0;
-      for (int i = 0; i < input.height; ++i) {
-        for (int j = 0; j < cols_for_proc; ++j) {
-          int global_col = start_col + j;
-          for (int c = 0; c < input.channels; ++c) {
-            send_buffers[p][buf_idx++] = input.data[GetGlobalIndex(i, global_col, c)];
-          }
+  send_buffer.resize(total_send_size);
+  for (int p = 0; p < proc_num_; ++p) {
+    int cols_for_proc = CalcColsForProcs(p, input.width, proc_num_);
+    int start_col = CalcStartCol(p, input.width, proc_num_);
+
+    int buf_idx = displs[p];
+    for (int i = 0; i < input.height; ++i) {
+      for (int j = 0; j < cols_for_proc; ++j) {
+        int global_col = start_col + j;
+        for (int c = 0; c < input.channels; ++c) {
+          send_buffer[buf_idx++] = input.data[GetGlobalIndex(i, global_col, c)];
         }
       }
     }
-    for (int p = 1; p < proc_num_; ++p) {
-      MPI_Send(send_buffers[p].data(), sendcounts[p], MPI_UINT8_T, p, 0, MPI_COMM_WORLD);
-    }
-
-    local_data_ = std::move(send_buffers[0]);
-  } else {
-    local_data_.resize(local_data_count_);
-    MPI_Recv(local_data_.data(), local_data_count_, MPI_UINT8_T, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
   }
+  // Распределяем данные с использованием Scatterv
+  local_data_.resize(local_data_count_);
+  MPI_Scatterv(send_buffer.data(), counts.data(), displs.data(), MPI_UINT8_T, local_data_.data(), local_data_count_,
+               MPI_INT, 0, MPI_COMM_WORLD);
+}
+
+void OtcheskovSGaussFilterVertSplitMPI::ReceiveLocalData() {
+  local_data_.resize(local_data_count_);
+
+  // Получаем данные от процесса 0
+  MPI_Status status;
+  MPI_Recv(local_data_.data(), local_data_count_, MPI_UINT8_T, 0, 0, MPI_COMM_WORLD, &status);
 }
 
 void OtcheskovSGaussFilterVertSplitMPI::ExchangeBoundaryColumns() {
   const auto &input = GetInput();
   int height = input.height;
+  int channels = input.channels;
+  int column_size = height * channels;
 
-  int left_proc = proc_rank_ - 1;
-  int right_proc = proc_rank_ + 1;
+  // Определяем соседей
+  int left_proc = (proc_rank_ > 0) ? proc_rank_ - 1 : MPI_PROC_NULL;
+  int right_proc = (proc_rank_ < proc_num_ - 1) ? proc_rank_ + 1 : MPI_PROC_NULL;
 
-  if (proc_rank_ == 0) {
-    left_proc = MPI_PROC_NULL;
-  }
-  if (proc_rank_ == proc_num_ - 1) {
-    right_proc = MPI_PROC_NULL;
-  }
+  // Подготавливаем граничные столбцы
+  std::vector<uint8_t> left_column(column_size);
+  std::vector<uint8_t> right_column(column_size);
 
-  std::vector<int> left_column(height * input.channels);
-  std::vector<int> right_column(height * input.channels);
+  ExtractBoundaryColumns(left_column, right_column);
 
-  // Извлекаем левый и правый граничные столбцы из локальных данных
+  // Обмениваемся граничными столбцами
+  std::vector<uint8_t> received_left(column_size);
+  std::vector<uint8_t> received_right(column_size);
+
+  ExchangeColumnsWithNeighbors(left_column, right_column, received_left, received_right, left_proc, right_proc);
+
+  CreateExtendedData(received_left, received_right);
+}
+
+void OtcheskovSGaussFilterVertSplitMPI::ExtractBoundaryColumns(std::vector<uint8_t> &left_column,
+                                                               std::vector<uint8_t> &right_column) {
+  const auto &input = GetInput();
+  int height = input.height;
+  int channels = input.channels;
+
   for (int i = 0; i < height; ++i) {
-    for (int c = 0; c < input.channels; ++c) {
-      // Левый граничный столбец (первый столбец в локальных данных)
-      left_column[i * input.channels + c] = local_data_[GetLocalIndex(i, 0, c)];
-
-      // Правый граничный столбец (последний столбец в локальных данных)
-      right_column[i * input.channels + c] = local_data_[GetLocalIndex(i, local_width_ - 1, c)];
+    for (int c = 0; c < channels; ++c) {
+      left_column[i * channels + c] = local_data_[GetLocalIndex(i, 0, c, local_width_)];
+      if (local_width_ > 0) {
+        right_column[i * channels + c] = local_data_[GetLocalIndex(i, local_width_ - 1, c, local_width_)];
+      }
     }
   }
+}
 
-  // Буферы для получения граничных столбцов от соседей
-  std::vector<uint8_t> received_left_column(height * input.channels);
-  std::vector<uint8_t> received_right_column(height * input.channels);
+void OtcheskovSGaussFilterVertSplitMPI::ExchangeColumnsWithNeighbors(const std::vector<uint8_t> &left_column,
+                                                                     const std::vector<uint8_t> &right_column,
+                                                                     std::vector<uint8_t> &received_left,
+                                                                     std::vector<uint8_t> &received_right,
+                                                                     int left_proc, int right_proc) {
+  const auto &input = GetInput();
+  int column_size = input.height * input.channels;
 
-  // Обмен граничными столбцами
-  // Отправляем левый столбец левому соседу, получаем от него правый столбец
+  MPI_Status status;
+
+  // Обмен с левым соседом
   if (left_proc != MPI_PROC_NULL) {
-    MPI_Sendrecv(left_column.data(), height * input.channels, MPI_UINT8_T, left_proc, 0, received_right_column.data(),
-                 height * input.channels, MPI_UINT8_T, left_proc, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Sendrecv(left_column.data(), column_size, MPI_UINT8_T, left_proc, 0, received_right.data(), column_size,
+                 MPI_UINT8_T, left_proc, 1, MPI_COMM_WORLD, &status);
   }
 
-  // Отправляем правый столбец правому соседу, получаем от него левый столбец
+  // Обмен с правым соседом
   if (right_proc != MPI_PROC_NULL) {
-    MPI_Sendrecv(right_column.data(), height * input.channels, MPI_UINT8_T, right_proc, 1, received_left_column.data(),
-                 height * input.channels, MPI_UINT8_T, right_proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Sendrecv(right_column.data(), column_size, MPI_UINT8_T, right_proc, 1, received_left.data(), column_size,
+                 MPI_UINT8_T, right_proc, 0, MPI_COMM_WORLD, &status);
   }
+}
 
-  // Создаем расширенные данные с двумя дополнительными столбцами (слева и справа)
+void OtcheskovSGaussFilterVertSplitMPI::CreateExtendedData(const std::vector<uint8_t> &received_left,
+                                                           const std::vector<uint8_t> &received_right) {
+  const auto &input = GetInput();
+  int height = input.height;
+  int channels = input.channels;
   int extended_width = local_width_ + 2;
-  extended_data_.resize(height * extended_width * input.channels);
 
-  // Копируем левый граничный столбец (если есть)
-  if (left_proc != MPI_PROC_NULL) {
+  extended_data_.resize(height * extended_width * channels);
+
+  // Копируем левый граничный столбец
+  if (proc_rank_ > 0) {
     for (int i = 0; i < height; ++i) {
-      for (int c = 0; c < input.channels; ++c) {
-        extended_data_[GetLocalIndex(i, 0, c)] = received_right_column[i * input.channels + c];
+      for (int c = 0; c < channels; ++c) {
+        extended_data_[GetLocalIndex(i, 0, c, extended_width)] = received_right[i * channels + c];
       }
     }
-  } else if (start_col_ > 0) {
-    // Если это первый столбец изображения, копируем из своих данных
+  } else {
+    // Первый процесс использует свой первый столбец как левую границу
     for (int i = 0; i < height; ++i) {
-      for (int c = 0; c < input.channels; ++c) {
-        extended_data_[GetLocalIndex(i, 0, c)] = local_data_[GetLocalIndex(i, 0, c)];
+      for (int c = 0; c < channels; ++c) {
+        extended_data_[GetLocalIndex(i, 0, c, extended_width)] = local_data_[GetLocalIndex(i, 0, c, local_width_)];
       }
     }
   }
 
-  // Копируем основные данные (сдвиг на 1, т.к. есть левый граничный столбец)
+  // Копируем основные данные
   for (int i = 0; i < height; ++i) {
     for (int j = 0; j < local_width_; ++j) {
-      for (int c = 0; c < input.channels; ++c) {
-        extended_data_[GetLocalIndex(i, j + 1, c)] = local_data_[GetLocalIndex(i, j, c)];
+      for (int c = 0; c < channels; ++c) {
+        extended_data_[GetLocalIndex(i, j + 1, c, extended_width)] = local_data_[GetLocalIndex(i, j, c, local_width_)];
       }
     }
   }
 
-  // Копируем правый граничный столбец (если есть)
-  if (right_proc != MPI_PROC_NULL) {
+  // Копируем правый граничный столбец
+  if (proc_rank_ < proc_num_ - 1) {
     for (int i = 0; i < height; ++i) {
-      for (int c = 0; c < input.channels; ++c) {
-        extended_data_[GetLocalIndex(i, extended_width - 1, c)] = received_left_column[i * input.channels + c];
+      for (int c = 0; c < channels; ++c) {
+        extended_data_[GetLocalIndex(i, extended_width - 1, c, extended_width)] = received_left[i * channels + c];
       }
     }
-  } else if (start_col_ + local_width_ < input.width) {
-    // Если это последний столбец изображения, копируем из своих данных
+  } else if (local_width_ > 0) {
+    // Последний процесс использует свой последний столбец как правую границу
     for (int i = 0; i < height; ++i) {
-      for (int c = 0; c < input.channels; ++c) {
-        extended_data_[GetLocalIndex(i, extended_width - 1, c)] = local_data_[GetLocalIndex(i, local_width_ - 1, c)];
+      for (int c = 0; c < channels; ++c) {
+        extended_data_[GetLocalIndex(i, extended_width - 1, c, extended_width)] =
+            local_data_[GetLocalIndex(i, local_width_ - 1, c, local_width_)];
       }
     }
   }
@@ -226,125 +276,121 @@ void OtcheskovSGaussFilterVertSplitMPI::ApplyGaussianFilter() {
   const auto &input = GetInput();
   int height = input.height;
   int channels = input.channels;
+  int extended_width = local_width_ + 2;
 
   local_output_.resize(local_data_count_);
 
-  // Применяем фильтр Гаусса 3x3 к локальным данным
+  // Применяем фильтр к каждому пикселю
   for (int i = 0; i < height; ++i) {
     for (int local_j = 0; local_j < local_width_; ++local_j) {
       int global_j = start_col_ + local_j;
-      int ext_j = local_j + 1;  // В расширенных данных (т.к. есть левый граничный столбец)
 
       for (int c = 0; c < channels; ++c) {
-        // Проверяем, не граничный ли это пиксель
-        bool is_boundary = (i == 0 || i == height - 1 || global_j == 0 || global_j == input.width - 1);
-
-        if (is_boundary) {
-          // Для граничных пикселей просто копируем значение
-          if (proc_rank_ == 0) {
-            // Процесс 0 имеет доступ к исходным данным
-            local_output_[GetLocalIndex(i, local_j, c)] = GetInput().data[GetGlobalIndex(i, global_j, c)];
-          } else {
-            // Для других процессов значение берется из расширенных данных
-            local_output_[GetLocalIndex(i, local_j, c)] = extended_data_[GetLocalIndex(i, ext_j, c)];
-          }
+        if (IsBoundaryPixel(i, global_j)) {
+          HandleBoundaryPixel(i, local_j, global_j, c);
         } else {
-          // Применяем полноценный фильтр Гаусса 3x3
-          double sum = 0.0;
-
-          // Двумерная свертка с ядром Гаусса 3x3
-          for (int ki = -1; ki <= 1; ++ki) {
-            for (int kj = -1; kj <= 1; ++kj) {
-              int data_row = i + ki;
-              int data_col = ext_j + kj;
-
-              int data_idx = GetLocalIndex(data_row, data_col, c);
-              sum += extended_data_[data_idx] * GAUSSIAN_KERNEL[ki + 1][kj + 1];
-            }
-          }
-
-          // Ограничиваем значение и записываем
-          uint8_t value = static_cast<uint8_t>(std::clamp(sum, 0.0, 255.0));
-          local_output_[GetLocalIndex(i, local_j, c)] = value;
-        }
-      }
-    }
-  }
-
-  // Специальная обработка для процесса 0 - граничные столбцы всего изображения
-  if (proc_rank_ == 0 && start_col_ == 0) {
-    // Первый столбец изображения (левый граничный)
-    for (int i = 0; i < height; ++i) {
-      for (int c = 0; c < channels; ++c) {
-        local_output_[GetLocalIndex(i, 0, c)] = GetInput().data[GetGlobalIndex(i, 0, c)];
-      }
-    }
-  }
-
-  // Специальная обработка для последнего процесса - правый граничный столбец
-  if (proc_rank_ == proc_num_ - 1) {
-    int last_local_col = local_width_ - 1;
-    int global_last_col = input.width - 1;
-
-    if (start_col_ + local_width_ == input.width) {
-      for (int i = 0; i < height; ++i) {
-        for (int c = 0; c < channels; ++c) {
-          local_output_[GetLocalIndex(i, last_local_col, c)] = GetInput().data[GetGlobalIndex(i, global_last_col, c)];
+          ApplyGaussianKernel(i, local_j, c, extended_width);
         }
       }
     }
   }
 }
 
-void OtcheskovSGaussFilterVertSplitMPI::CollectResults() {
-  const auto &input = GetInput();
+bool OtcheskovSGaussFilterVertSplitMPI::IsBoundaryPixel(int row, int col) {
+  return row == 0 || row == GetInput().height - 1 || col == 0 || col == GetInput().width - 1;
+}
 
+void OtcheskovSGaussFilterVertSplitMPI::HandleBoundaryPixel(int row, int local_j, int global_j, int channel) {
+  const auto &input = GetInput();
+  int extended_width = local_width_ + 2;
+  int ext_j = local_j + 1;
+
+  // Для граничных пикселей просто копируем значение
+  if (proc_rank_ == 0) {
+    local_output_[GetLocalIndex(row, local_j, channel, local_width_)] =
+        input.data[GetGlobalIndex(row, global_j, channel)];
+  } else {
+    local_output_[GetLocalIndex(row, local_j, channel, local_width_)] =
+        extended_data_[GetLocalIndex(row, ext_j, channel, extended_width)];
+  }
+}
+
+void OtcheskovSGaussFilterVertSplitMPI::ApplyGaussianKernel(int row, int local_j, int channel, int extended_width) {
+  double sum = 0.0;
+  int ext_j = local_j + 1;  // Смещение в extended_data_
+
+  for (int ki = -1; ki <= 1; ++ki) {
+    for (int kj = -1; kj <= 1; ++kj) {
+      int data_row = row + ki;
+      int data_col = ext_j + kj;
+
+      int data_idx = GetLocalIndex(data_row, data_col, channel, extended_width);
+      sum += extended_data_[data_idx] * GAUSSIAN_KERNEL[ki + 1][kj + 1];
+    }
+  }
+
+  // Ограничиваем значение и сохраняем
+  local_output_[GetLocalIndex(row, local_j, channel, local_width_)] = static_cast<uint8_t>(std::clamp(sum, 0.0, 255.0));
+}
+
+void OtcheskovSGaussFilterVertSplitMPI::CollectResults() {
   if (proc_rank_ == 0) {
     // Процесс 0 собирает данные от всех процессов
-
-    // Сначала копируем свои данные
-    for (int i = 0; i < input.height; ++i) {
-      for (int local_j = 0; local_j < local_width_; ++local_j) {
-        int global_j = start_col_ + local_j;
-        for (int c = 0; c < input.channels; ++c) {
-          GetOutput().data[GetGlobalIndex(i, global_j, c)] = local_output_[GetLocalIndex(i, local_j, c)];
-        }
-      }
-    }
-
-    // Принимаем данные от других процессов
-    for (int p = 1; p < proc_num_; ++p) {
-      // Получаем размер данных от процесса p
-      int base_cols = input.width / proc_num_;
-      int remainder = input.width % proc_num_;
-      int cols_for_proc = base_cols + (p < remainder ? 1 : 0);
-      int proc_data_count = input.height * cols_for_proc * input.channels;
-
-      std::vector<uint8_t> proc_data(proc_data_count);
-      MPI_Recv(proc_data.data(), proc_data_count, MPI_UINT8_T, p, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-      // Определяем начальный столбец для процесса p
-      int start_col = 0;
-      for (int i = 0; i < p; ++i) {
-        int proc_cols = base_cols + (i < remainder ? 1 : 0);
-        start_col += proc_cols;
-      }
-
-      // Копируем данные процесса p в выходной массив
-      int buf_idx = 0;
-      for (int i = 0; i < input.height; ++i) {
-        for (int j = 0; j < cols_for_proc; ++j) {
-          int global_col = start_col + j;
-          for (int c = 0; c < input.channels; ++c) {
-            GetOutput().data[GetGlobalIndex(i, global_col, c)] = proc_data[buf_idx++];
-          }
-        }
-      }
-    }
+    GatherResultsFromAllProcesses();
   } else {
     // Отправляем свои данные процессу 0
-    MPI_Send(local_output_.data(), local_data_count_, MPI_UINT8_T, 0, 0, MPI_COMM_WORLD);
+    SendLocalResults();
   }
+}
+
+void OtcheskovSGaussFilterVertSplitMPI::GatherResultsFromAllProcesses() {
+  // Сначала копируем свои данные
+  CopyLocalResultsToOutput();
+
+  // Принимаем данные от других процессов
+  for (int p = 1; p < proc_num_; ++p) {
+    ReceiveAndStoreProcessResults(p);
+  }
+}
+
+void OtcheskovSGaussFilterVertSplitMPI::CopyLocalResultsToOutput() {
+  const auto &input = GetInput();
+
+  for (int i = 0; i < input.height; ++i) {
+    for (int local_j = 0; local_j < local_width_; ++local_j) {
+      int global_j = start_col_ + local_j;
+      for (int c = 0; c < input.channels; ++c) {
+        GetOutput().data[GetGlobalIndex(i, global_j, c)] = local_output_[GetLocalIndex(i, local_j, c, local_width_)];
+      }
+    }
+  }
+}
+
+void OtcheskovSGaussFilterVertSplitMPI::ReceiveAndStoreProcessResults(int proc_id) {
+  const auto &input = GetInput();
+
+  int cols_for_proc = CalcColsForProcs(proc_id, input.width, proc_num_);
+  int proc_data_count = input.height * cols_for_proc * input.channels;
+
+  std::vector<uint8_t> proc_data(proc_data_count);
+  MPI_Status status;
+  MPI_Recv(proc_data.data(), proc_data_count, MPI_UINT8_T, proc_id, 0, MPI_COMM_WORLD, &status);
+
+  int start_col = CalcStartCol(proc_id, input.width, proc_num_);
+  int buf_idx = 0;
+
+  for (int i = 0; i < input.height; ++i) {
+    for (int j = 0; j < cols_for_proc; ++j) {
+      int global_col = start_col + j;
+      for (int c = 0; c < input.channels; ++c) {
+        GetOutput().data[GetGlobalIndex(i, global_col, c)] = proc_data[buf_idx++];
+      }
+    }
+  }
+}
+
+void OtcheskovSGaussFilterVertSplitMPI::SendLocalResults() {
+  MPI_Send(local_output_.data(), local_data_count_, MPI_UINT8_T, 0, 0, MPI_COMM_WORLD);
 }
 
 }  // namespace otcheskov_s_gauss_filter_vert_split
