@@ -20,6 +20,12 @@ class OtcheskovSLinearTopologyMPI : public BaseTask {
 
   static void SendMessageMPI(int dest, const Message &msg, int tag);
   static Message RecvMessageMPI(int src, int tag);
+
+  [[nodiscard]] Message HandleLocalMessage(const MessageHeader &header, MessageData data) const;
+  [[nodiscard]] static Message ForwardMessageToDest(const Message &initial_msg, int prev, int next, bool is_src,
+                                                    bool is_dest);
+  [[nodiscard]] static Message HandleConfirmToSource(Message &current_msg, int prev, int next, bool is_src,
+                                                     bool is_dest);
   [[nodiscard]] Message SendMessageLinear(const Message &msg) const;
 
   int proc_rank_{};

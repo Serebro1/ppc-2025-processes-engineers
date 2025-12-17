@@ -2,7 +2,6 @@
 
 #include <mpi.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <utility>
 #include <vector>
@@ -67,56 +66,38 @@ Message OtcheskovSLinearTopologyMPI::RecvMessageMPI(int src, int tag) {
   return {header, std::move(data)};
 }
 
-Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) const {
-  auto [header, data] = msg;
-  header.delivered = 0;
+Message OtcheskovSLinearTopologyMPI::HandleLocalMessage(const MessageHeader &header, MessageData data) const {
+  MessageHeader result_header = header;
+  result_header.delivered = (proc_rank_ == header.src) ? 1 : 0;
 
-  if (header.src == header.dest) {
-    if (proc_rank_ == header.src) {
-      header.delivered = 1;
-    }
-    MPI_Bcast(&header.delivered, 1, MPI_INT, header.src, MPI_COMM_WORLD);
+  MPI_Bcast(&result_header.delivered, 1, MPI_INT, header.src, MPI_COMM_WORLD);
 
-    if (proc_rank_ != header.src) {
-      data.clear();
-    }
-    return {header, std::move(data)};
+  if (proc_rank_ != header.src) {
+    data.clear();
   }
+  return {result_header, std::move(data)};
+}
 
-  const int direction = (header.dest > header.src) ? 1 : -1;
-  Message current_msg = {header, data};
-  const bool shouldParticipate = (direction > 0 && proc_rank_ >= header.src && proc_rank_ <= header.dest) ||
-                                 (direction < 0 && proc_rank_ <= header.src && proc_rank_ >= header.dest);
+Message OtcheskovSLinearTopologyMPI::ForwardMessageToDest(const Message &initial_msg, int prev, int next, bool is_src,
+                                                          bool is_dest) {
+  Message current_msg = is_src ? initial_msg : RecvMessageMPI(prev, kMessageTag);
 
-  if (!shouldParticipate) {
-    return {MessageHeader(), MessageData()};
-  }
-
-  const bool isSrc = (proc_rank_ == header.src);
-  const bool isDest = (proc_rank_ == header.dest);
-
-  const int prev = isSrc ? MPI_PROC_NULL : proc_rank_ - direction;
-  const int next = isDest ? MPI_PROC_NULL : proc_rank_ + direction;
-
-  if (!isSrc) {
-    current_msg = RecvMessageMPI(prev, kMessageTag);
-  } else {
-    current_msg = {header, data};
-  }
-
-  if (!isDest) {
+  if (!is_dest) {
     SendMessageMPI(next, current_msg, kMessageTag);
   } else {
     current_msg.first.delivered = 1;
   }
+  return current_msg;
+}
 
-  // пересылка подтверждения
-  if (isDest) {
+Message OtcheskovSLinearTopologyMPI::HandleConfirmToSource(Message &current_msg, int prev, int next, bool is_src,
+                                                           bool is_dest) {
+  if (is_dest) {
     SendMessageMPI(prev, current_msg, kConfirmTag);
   } else {
     Message confirmation = RecvMessageMPI(next, kConfirmTag);
 
-    if (isSrc) {
+    if (is_src) {
       current_msg.first.delivered = confirmation.first.delivered;
     } else {
       SendMessageMPI(prev, confirmation, kConfirmTag);
@@ -124,6 +105,34 @@ Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) const
     }
   }
   return current_msg;
+}
+
+Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) const {
+  auto [header, data] = msg;
+  header.delivered = 0;
+
+  if (header.src == header.dest) {
+    return HandleLocalMessage(header, std::move(data));
+  }
+
+  const int direction = (header.dest > header.src) ? 1 : -1;
+  const bool should_participate = (direction > 0 && proc_rank_ >= header.src && proc_rank_ <= header.dest) ||
+                                  (direction < 0 && proc_rank_ <= header.src && proc_rank_ >= header.dest);
+
+  if (!should_participate) {
+    return {MessageHeader(), MessageData()};
+  }
+
+  const bool is_src = (proc_rank_ == header.src);
+  const bool is_dest = (proc_rank_ == header.dest);
+
+  const int prev = is_src ? MPI_PROC_NULL : proc_rank_ - direction;
+  const int next = is_dest ? MPI_PROC_NULL : proc_rank_ + direction;
+
+  Message current_msg = ForwardMessageToDest({header, data}, prev, next, is_src, is_dest);
+
+  // пересылка подтверждения
+  return HandleConfirmToSource(current_msg, prev, next, is_src, is_dest);
 }
 
 bool OtcheskovSLinearTopologyMPI::RunImpl() {
@@ -151,9 +160,9 @@ bool OtcheskovSLinearTopologyMPI::RunImpl() {
 
   bool check_passed = false;
   if (proc_rank_ == src) {
-    check_passed = result_msg.first.delivered != 0 && !result_msg.second.empty();
+    check_passed = result_msg.first.delivered != 0;
   } else if (proc_rank_ == dest) {
-    check_passed = !result_msg.second.empty() && result_msg.first.delivered != 0;
+    check_passed = !result_msg.second.empty();
   } else {
     check_passed = true;
   }
