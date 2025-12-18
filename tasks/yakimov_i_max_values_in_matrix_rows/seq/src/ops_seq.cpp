@@ -17,7 +17,7 @@ YakimovIMaxValuesInMatrixRowsSEQ::YakimovIMaxValuesInMatrixRowsSEQ(const InType 
   GetInput() = in;
   GetOutput() = 0;
   std::filesystem::path base_path = std::filesystem::current_path();
-  while (base_path.filename() == "build") {
+  while (base_path.filename() != "ppc-2025-processes-engineers") {
     base_path = base_path.parent_path();
   }
   matrix_Filename_ =
