@@ -66,18 +66,6 @@ Message OtcheskovSLinearTopologyMPI::RecvMessageMPI(int src, int tag) {
   return {header, std::move(data)};
 }
 
-Message OtcheskovSLinearTopologyMPI::HandleLocalMessage(const MessageHeader &header, MessageData data) const {
-  MessageHeader result_header = header;
-  result_header.delivered = (proc_rank_ == header.src) ? 1 : 0;
-
-  MPI_Bcast(&result_header.delivered, 1, MPI_INT, header.src, MPI_COMM_WORLD);
-
-  if (proc_rank_ != header.src) {
-    data.clear();
-  }
-  return {result_header, std::move(data)};
-}
-
 Message OtcheskovSLinearTopologyMPI::ForwardMessageToDest(const Message &initial_msg, int prev, int next, bool is_src,
                                                           bool is_dest) {
   Message current_msg = is_src ? initial_msg : RecvMessageMPI(prev, kMessageTag);
@@ -112,7 +100,8 @@ Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) const
   header.delivered = 0;
 
   if (header.src == header.dest) {
-    return HandleLocalMessage(header, std::move(data));
+    header.delivered = 1;
+    return {header, std::move(data)};
   }
 
   const int direction = (header.dest > header.src) ? 1 : -1;
