@@ -17,7 +17,13 @@ class OtcheskovSLinearTopologyPerfTests : public ppc::util::BaseRunPerfTests<InT
   InType input_msg_;
 
   void SetUp() override {
-    input_msg_.first = {.delivered = 0, .src = 0, .dest = 1, .data_size = 0};
+    input_msg_.first = {.delivered = 0, .src = 0, .dest = 0, .data_size = 0};
+    if (ppc::util::IsUnderMpirun()) {
+      int proc_size{};
+      MPI_Comm_size(MPI_COMM_WORLD, &proc_size);
+      input_msg_.first.dest = proc_size - 1;
+    }
+
     input_msg_.second.resize(kDataSize);
     for (int i = 0; i < kDataSize; ++i) {
       input_msg_.second[static_cast<std::size_t>(i)] = i;
@@ -49,17 +55,7 @@ class OtcheskovSLinearTopologyPerfTests : public ppc::util::BaseRunPerfTests<InT
 };
 
 TEST_P(OtcheskovSLinearTopologyPerfTests, LinearTopologyPerfTests) {
-  if (!ppc::util::IsUnderMpirun()) {
-    ExecuteTest(GetParam());
-  } else {
-    int proc_nums{};
-    MPI_Comm_size(MPI_COMM_WORLD, &proc_nums);
-    if (proc_nums < 2) {
-      std::cerr << "Tests should run on 2 or more processes\n";
-    } else {
-      ExecuteTest(GetParam());
-    }
-  }
+  ExecuteTest(GetParam());
 }
 
 const auto kAllPerfTasks =
