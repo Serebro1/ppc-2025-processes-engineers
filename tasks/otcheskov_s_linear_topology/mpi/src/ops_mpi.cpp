@@ -22,6 +22,9 @@ OtcheskovSLinearTopologyMPI::OtcheskovSLinearTopologyMPI(const InType &in) {
   MPI_Comm_size(MPI_COMM_WORLD, &proc_num_);
 
   GetInput() = in;
+  if (proc_rank_ != in.first.src) {
+    GetInput().second.clear();
+  }
 }
 
 bool OtcheskovSLinearTopologyMPI::ValidationImpl() {

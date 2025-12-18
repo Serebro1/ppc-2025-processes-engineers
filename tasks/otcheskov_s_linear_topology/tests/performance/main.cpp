@@ -3,7 +3,6 @@
 
 #include <cmath>
 #include <cstddef>
-#include <iostream>
 
 #include "otcheskov_s_linear_topology/common/include/common.hpp"
 #include "otcheskov_s_linear_topology/mpi/include/ops_mpi.hpp"
