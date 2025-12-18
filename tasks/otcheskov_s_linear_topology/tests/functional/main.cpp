@@ -206,11 +206,13 @@ TEST_P(OtcheskovSLinearTopologyFuncTestsValidation, Validation) {
   ExecuteTest(GetParam());
 }
 
-const std::array<TestType, 4> kValidationTestParam = {{
+const std::array<TestType, 6> kValidationTestParam = {{
     {{MessageHeader{.delivered = 0, .src = -1, .dest = 0, .data_size = 1}, kData1}, 1},
     {{MessageHeader{.delivered = 0, .src = 0, .dest = -1, .data_size = 1}, kData1}, 2},
     {{MessageHeader{.delivered = 0, .src = 0, .dest = 0, .data_size = 0}, MessageData{}}, 3},
     {{MessageHeader{.delivered = 1, .src = 0, .dest = 0, .data_size = 1}, kData1}, 4},
+    {{MessageHeader{.delivered = 0, .src = 100000, .dest = 0, .data_size = 1}, kData1}, 5},
+    {{MessageHeader{.delivered = 0, .src = 0, .dest = 100000, .data_size = 1}, kData1}, 6},
 }};
 
 const auto kValidationTestTasksList =
