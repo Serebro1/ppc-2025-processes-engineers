@@ -24,6 +24,7 @@ OtcheskovSLinearTopologyMPI::OtcheskovSLinearTopologyMPI(const InType &in) {
   GetInput() = in;
   if (proc_rank_ != in.first.src) {
     GetInput().second.clear();
+    GetInput().second.shrink_to_fit();
   }
 }
 
@@ -75,6 +76,11 @@ Message OtcheskovSLinearTopologyMPI::ForwardMessageToDest(const Message &initial
 
   if (!is_dest) {
     SendMessageMPI(next, current_msg, kMessageTag);
+    if (!is_src) {
+      current_msg.second.clear();
+      current_msg.second.shrink_to_fit();
+      current_msg.first.data_size = 0;
+    }
   } else {
     current_msg.first.delivered = 1;
   }
@@ -92,7 +98,6 @@ Message OtcheskovSLinearTopologyMPI::HandleConfirmToSource(Message &current_msg,
       current_msg.first.delivered = confirmation.first.delivered;
     } else {
       SendMessageMPI(prev, confirmation, kConfirmTag);
-      current_msg.second.clear();
     }
   }
   return current_msg;
@@ -121,7 +126,7 @@ Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) const
   const int prev = is_src ? MPI_PROC_NULL : proc_rank_ - direction;
   const int next = is_dest ? MPI_PROC_NULL : proc_rank_ + direction;
 
-  Message current_msg = ForwardMessageToDest({header, data}, prev, next, is_src, is_dest);
+  Message current_msg = ForwardMessageToDest({header, std::move(data)}, prev, next, is_src, is_dest);
 
   // пересылка подтверждения
   return HandleConfirmToSource(current_msg, prev, next, is_src, is_dest);
