@@ -44,7 +44,7 @@ InType ApplyGaussianFilter(const InType &input) {
             int srcY = mirrorCoord(y + dy, input.height);
             int srcX = mirrorCoord(x + dx, input.width);
             int idx = (srcY * input.width + srcX) * input.channels + c;
-            sum += input.data[idx] * GAUSSIAN_KERNEL[dy + 1][dx + 1];
+            sum += input.data[idx] * kGaussianKernel[dy + 1][dx + 1];
           }
         }
         int out_idx = (y * input.width + x) * input.channels + c;
@@ -157,13 +157,6 @@ bool CompareImages(const InType &expected, const InType &actual) {
     std::cout << "Total differences found: " << diff_count << "\n";
     std::cout << "Maximum pixel difference: " << max_diff << "\n";
     std::cout << "Error blocks found: " << error_blocks.size() << "\n";
-
-    std::cout << "\nFirst few differences:\n";
-    for (const auto &[row, col, channel, expect_val, actual_val] : diff_samples) {
-      std::cout << "  Row=" << row << ", Col=" << col << ", Channel=" << channel << ": "
-                << "expected=" << static_cast<int>(expect_val) << ", actual=" << static_cast<int>(actual_val)
-                << ", diff=" << std::abs(static_cast<int>(expect_val) - static_cast<int>(actual_val)) << "\n";
-    }
 
     if (!error_blocks.empty()) {
       std::cout << "\n=== BLOCKS WITH ERRORS (3x3) ===\n";
@@ -282,7 +275,6 @@ class OtcheskovSGaussFilterVertSplitFuncTestsProcesses : public ppc::util::BaseR
 
   bool CheckTestOutputData(OutType &output_data) final {
     if (!ppc::util::IsUnderMpirun()) {
-      PrintPixelSample("INPUT IMAGE TOP-LEFT", input_img_, 0, 0);
       return CompareImages(expect_img_, output_data);
     }
 
@@ -331,7 +323,6 @@ class OtcheskovSGaussFilterVertSplitRealTestsProcesses : public ppc::util::BaseR
 
   bool CheckTestOutputData(OutType &output_data) final {
     if (!ppc::util::IsUnderMpirun()) {
-      PrintPixelSample("INPUT IMAGE TOP-LEFT", input_img_, 0, 0);
       return CompareImages(expect_img_, output_data);
     }
 

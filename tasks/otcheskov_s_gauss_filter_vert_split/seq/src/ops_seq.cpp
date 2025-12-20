@@ -66,7 +66,7 @@ bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::Run
               xk = 2 * input.width - xk - 1;
             }
 
-            double weight = GAUSSIAN_KERNEL[ky + 1][kx + 1];
+            double weight = kGaussianKernel[ky + 1][kx + 1];
 
             int idx = GetIndex(yk, xk, c);
             sum += weight * input.data[idx];

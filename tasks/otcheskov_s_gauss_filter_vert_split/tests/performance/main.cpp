@@ -11,7 +11,6 @@
 #include "util/include/util.hpp"
 
 namespace otcheskov_s_gauss_filter_vert_split {
-
 namespace {
 InType CreateGradientImage(int width, int height, int channels) {
   InType img;
@@ -34,6 +33,7 @@ InType CreateGradientImage(int width, int height, int channels) {
 
   return img;
 }
+
 }  // namespace
 
 class OtcheskovSGaussFilterVertSplitPerfTests : public ppc::util::BaseRunPerfTests<InType, OutType> {
@@ -67,7 +67,7 @@ class OtcheskovSGaussFilterVertSplitPerfTests : public ppc::util::BaseRunPerfTes
   }
 };
 
-TEST_P(OtcheskovSGaussFilterVertSplitPerfTests, GaussFilterVertSplitPerfTests) {
+TEST_P(OtcheskovSGaussFilterVertSplitPerfTests, RunPerfTests) {
   ExecuteTest(GetParam());
 }
 
@@ -79,7 +79,6 @@ const auto kGtestValues = ppc::util::TupleToGTestValues(kAllPerfTasks);
 
 const auto kPerfTestName = OtcheskovSGaussFilterVertSplitPerfTests::CustomPerfTestName;
 
-INSTANTIATE_TEST_SUITE_P(GaussFilterVertSplitPerfTests, OtcheskovSGaussFilterVertSplitPerfTests, kGtestValues,
-                         kPerfTestName);
+INSTANTIATE_TEST_SUITE_P(RunPerfTests, OtcheskovSGaussFilterVertSplitPerfTests, kGtestValues, kPerfTestName);
 
 }  // namespace otcheskov_s_gauss_filter_vert_split

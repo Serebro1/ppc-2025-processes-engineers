@@ -226,7 +226,7 @@ void OtcheskovSGaussFilterVertSplitMPI::ApplyGaussianFilter() {
           for (int kj = -1; kj <= 1; ++kj) {
             const int data_col = ext_j + kj;
             const int idx = GetLocalIndex(data_row, data_col, c, extended_width);
-            sum += extended_data_[idx] * GAUSSIAN_KERNEL[ki + 1][kj + 1];
+            sum += extended_data_[idx] * kGaussianKernel[ki + 1][kj + 1];
           }
         }
 
