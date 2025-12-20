@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <mpi.h>
 #include <stb/stb_image.h>
 #include <stb/stb_image_write.h>
 
@@ -23,47 +24,35 @@ namespace otcheskov_s_gauss_filter_vert_split {
 namespace {
 InType ApplyGaussianFilter(const InType &input) {
   const auto &[data, height, width, channels] = input;
-  OutType output;
-  output.data.resize(data.size());
-  output.height = height;
-  output.width = width;
-  output.channels = channels;
+  OutType output{.data = std::vector<uint8_t>(data.size()), .height = height, .width = width, .channels = channels};
 
-  for (int y = 1; y < height - 1; ++y) {
-    for (int x = 1; x < width - 1; ++x) {
-      for (int c = 0; c < channels; ++c) {
+  auto mirrorCoord = [](int i, int size) {
+    if (i < 0) {
+      return -i - 1;
+    }
+    if (i >= size) {
+      return 2 * size - i - 1;
+    }
+    return i;
+  };
+
+  for (int y = 0; y < input.height; ++y) {
+    for (int x = 0; x < input.width; ++x) {
+      for (int c = 0; c < input.channels; ++c) {
         double sum = 0.0;
-        for (int ky = -1; ky <= 1; ++ky) {
-          for (int kx = -1; kx <= 1; ++kx) {
-            int idx = ((y + ky) * width + (x + kx)) * channels + c;
-            sum += data[idx] * GAUSSIAN_KERNEL[ky + 1][kx + 1];
+        for (int dy = -1; dy <= 1; ++dy) {
+          for (int dx = -1; dx <= 1; ++dx) {
+            int srcY = mirrorCoord(y + dy, input.height);
+            int srcX = mirrorCoord(x + dx, input.width);
+            int idx = (srcY * input.width + srcX) * input.channels + c;
+            sum += input.data[idx] * GAUSSIAN_KERNEL[dy + 1][dx + 1];
           }
         }
-        int out_idx = (y * width + x) * channels + c;
-        output.data[out_idx] = static_cast<uint8_t>(sum + 0.5);
+        int out_idx = (y * input.width + x) * input.channels + c;
+        output.data[out_idx] = static_cast<uint8_t>(std::clamp(std::round(sum), 0.0, 255.0));
       }
     }
   }
-
-  for (int x = 0; x < width; ++x) {
-    for (int c = 0; c < channels; ++c) {
-      int top_idx = (0 * width + x) * channels + c;
-      output.data[top_idx] = data[top_idx];
-      int bottom_idx = ((height - 1) * width + x) * channels + c;
-      output.data[bottom_idx] = data[bottom_idx];
-    }
-  }
-
-  for (int y = 1; y < height - 1; ++y) {
-    for (int c = 0; c < channels; ++c) {
-      int left_idx = (y * width + 0) * channels + c;
-      output.data[left_idx] = data[left_idx];
-
-      int right_idx = (y * width + (width - 1)) * channels + c;
-      output.data[right_idx] = data[right_idx];
-    }
-  }
-
   return output;
 }
 
@@ -87,6 +76,121 @@ ImageData CreateGradientImage(int width, int height, int channels) {
   }
 
   return img;
+}
+
+void PrintPixelSample(const std::string &title, const ImageData &img, int start_row, int start_col,
+                      int sample_size = 3) {
+  std::cout << "\n--- " << title << " (rows " << start_row << "-" << start_row + sample_size - 1 << ", cols "
+            << start_col << "-" << start_col + sample_size - 1 << ") ---\n";
+
+  for (int row = 0; row < sample_size && start_row + row < img.height; ++row) {
+    std::cout << "Row " << std::setw(3) << (start_row + row) << ": ";
+    for (int col = 0; col < sample_size && start_col + col < img.width; ++col) {
+      std::cout << "[";
+      for (int ch = 0; ch < img.channels; ++ch) {
+        size_t idx = ((start_row + row) * img.width + (start_col + col)) * img.channels + ch;
+        std::cout << std::setw(3) << static_cast<int>(img.data[idx]);
+        if (ch < img.channels - 1) {
+          std::cout << ",";
+        }
+      }
+      std::cout << "] ";
+    }
+    std::cout << "\n";
+  }
+}
+
+bool CompareImages(const ImageData &expected, const ImageData &actual) {
+  std::cout << "\n===== IMAGE COMPARISON =====\n";
+  std::cout << "EXPECTED: " << expected.width << "x" << expected.height << "x" << expected.channels << " ("
+            << expected.data.size() << " bytes)\n";
+  std::cout << "ACTUAL:   " << actual.width << "x" << actual.height << "x" << actual.channels << " ("
+            << actual.data.size() << " bytes)\n";
+
+  if (expected.width != actual.width || expected.height != actual.height || expected.channels != actual.channels) {
+    std::cerr << "!!! SIZE MISMATCH !!!\n";
+    return false;
+  }
+
+  bool images_equal = true;
+  size_t diff_count = 0, max_diff = 0;
+  std::vector<std::tuple<int, int, int, uint8_t, uint8_t>> diff_samples;
+  std::set<std::pair<int, int>> error_blocks;  // Хранит координаты левых верхних углов блоков с ошибками
+
+  const size_t total_pixels = expected.width * expected.height * expected.channels;
+  for (size_t i = 0; i < total_pixels; ++i) {
+    if (expected.data[i] != actual.data[i]) {
+      images_equal = false;
+      diff_count++;
+
+      size_t pixel_idx = i / expected.channels;
+      int row = pixel_idx / expected.width;
+      int col = pixel_idx % expected.width;
+      int channel = i % expected.channels;
+
+      uint8_t expected_val = expected.data[i];
+      uint8_t actual_val = actual.data[i];
+      size_t diff = std::abs(static_cast<int>(expected_val) - static_cast<int>(actual_val));
+
+      if (diff > max_diff) {
+        max_diff = diff;
+      }
+
+      int block_row = (row / 3) * 3;
+      int block_col = (col / 3) * 3;
+
+      if (block_row + 2 < expected.height && block_col + 2 < expected.width) {
+        error_blocks.insert({block_row, block_col});
+      }
+
+      if (diff_samples.size() < 5) {
+        diff_samples.emplace_back(row, col, channel, expected_val, actual_val);
+      }
+      if (diff_count > 100) {
+        break;
+      }
+    }
+  }
+
+  if (images_equal) {
+    std::cout << "\n[ IMAGES ARE IDENTICAL ]\n";
+  } else {
+    std::cout << "\n[ IMAGES ARE NOT EQUAL ]\n";
+    std::cout << "Total differences found: " << diff_count << "\n";
+    std::cout << "Maximum pixel difference: " << max_diff << "\n";
+    std::cout << "Error blocks found: " << error_blocks.size() << "\n";
+
+    std::cout << "\nFirst few differences:\n";
+    for (const auto &[row, col, channel, expect_val, actual_val] : diff_samples) {
+      std::cout << "  Row=" << row << ", Col=" << col << ", Channel=" << channel << ": "
+                << "expected=" << static_cast<int>(expect_val) << ", actual=" << static_cast<int>(actual_val)
+                << ", diff=" << std::abs(static_cast<int>(expect_val) - static_cast<int>(actual_val)) << "\n";
+    }
+
+    if (!error_blocks.empty()) {
+      std::cout << "\n=== BLOCKS WITH ERRORS (3x3) ===\n";
+      int block_num = 1;
+      for (const auto &[block_row, block_col] : error_blocks) {
+        if (block_num > 5) {
+          std::cout << "  ... and " << (error_blocks.size() - 5) << " more error blocks\n";
+          break;
+        }
+
+        std::cout << "\n--- ERROR BLOCK #" << block_num << " (rows " << block_row << "-" << block_row + 2 << ", cols "
+                  << block_col << "-" << block_col + 2 << ") ---\n";
+
+        std::cout << "EXPECTED:\n";
+        PrintPixelSample("EXPECTED BLOCK", expected, block_row, block_col, 3);
+
+        std::cout << "ACTUAL:\n";
+        PrintPixelSample("ACTUAL BLOCK", actual, block_row, block_col, 3);
+
+        block_num++;
+      }
+    }
+  }
+  std::cout << "============================\n" << std::endl;
+  return images_equal;
 }
 
 ImageData LoadRgbImageOrThrow(const std::string &task_id, const std::string &file_name) {
@@ -182,13 +286,22 @@ class OtcheskovSGaussFilterVertSplitFuncTestsProcesses : public ppc::util::BaseR
   void SetUp() override {
     const TestType &params = std::get<static_cast<std::size_t>(ppc::util::GTestParamIndex::kTestParams)>(GetParam());
     const InType &input_test_data = std::get<1>(params);
-    input_img_ = CreateGradientImage(input_test_data.height, input_test_data.width, input_test_data.channels);
+    input_img_ = CreateGradientImage(input_test_data.width, input_test_data.height, input_test_data.channels);
     expect_img_ = ApplyGaussianFilter(input_img_);
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
-    std::cout << (expect_img_.data == output_data.data) << std::endl;
-    return expect_img_ == output_data;
+    if (!ppc::util::IsUnderMpirun()) {
+      PrintPixelSample("INPUT IMAGE TOP-LEFT", input_img_, 0, 0);
+      return CompareImages(expect_img_, output_data);
+    }
+
+    int proc_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
+    if (proc_rank == 0) {
+      return CompareImages(expect_img_, output_data);
+    }
+    return true;
   }
 
   InType GetTestInputData() final {
@@ -233,30 +346,39 @@ const std::array<TestType, 6> kTestValidParam = {
       InType{.data = {10, 12, 14, 15, 16, 17, 18, 19, 50}, .height = 4, .width = 4, .channels = 3}},
      {"image_3x3x1_wrong_height",
       InType{.data = {10, 12, 14, 15, 16, 17, 18, 19, 50}, .height = 0, .width = 3, .channels = 1}},
-     {"image_3x3x1_wrong_Width",
+     {"image_3x3x1_wrong_width",
       InType{.data = {10, 12, 14, 15, 16, 17, 18, 19, 50}, .height = 3, .width = 0, .channels = 1}},
-     {"image_3x3x1_wrong_Channel",
+     {"image_3x3x1_wrong_channel",
       InType{.data = {10, 12, 14, 15, 16, 17, 18, 19, 50}, .height = 3, .width = 3, .channels = 0}}}};
 
-const std::array<TestType, 4> kTestFuncParam = {
+const std::array<TestType, 10> kTestFuncParam = {
     {{"image_3x3x1", InType{.data = {}, .height = 3, .width = 3, .channels = 1}},
      {"image_3x3x3", InType{.data = {}, .height = 3, .width = 3, .channels = 3}},
+     {"image_4x4x1", InType{.data = {}, .height = 4, .width = 4, .channels = 1}},
      {"image_6x6x1", InType{.data = {}, .height = 6, .width = 6, .channels = 1}},
-     {"image_21x21x3", InType{.data = {}, .height = 21, .width = 21, .channels = 3}}}};
+     {"image_21x21x3", InType{.data = {}, .height = 21, .width = 21, .channels = 3}},
+     {"image_100x100x3", InType{.data = {}, .height = 100, .width = 100, .channels = 3}},
+     {"image_50x100x3", InType{.data = {}, .height = 50, .width = 100, .channels = 3}},
+     {"image_100x50x3", InType{.data = {}, .height = 100, .width = 50, .channels = 3}},
+     {"image_75x35x3", InType{.data = {}, .height = 75, .width = 35, .channels = 3}},
+     {"image_35x75x3", InType{.data = {}, .height = 35, .width = 75, .channels = 3}}}};
 
 const auto kTestValidTasksList = std::tuple_cat(ppc::util::AddFuncTask<OtcheskovSGaussFilterVertSplitMPI, InType>(
                                                     kTestValidParam, PPC_SETTINGS_otcheskov_s_gauss_filter_vert_split),
                                                 ppc::util::AddFuncTask<OtcheskovSGaussFilterVertSplitSEQ, InType>(
                                                     kTestValidParam, PPC_SETTINGS_otcheskov_s_gauss_filter_vert_split));
 
-const auto kTestFuncTasksList = std::tuple_cat(ppc::util::AddFuncTask<OtcheskovSGaussFilterVertSplitSEQ, InType>(
-    kTestFuncParam, PPC_SETTINGS_otcheskov_s_gauss_filter_vert_split));
+const auto kTestFuncTasksList = std::tuple_cat(ppc::util::AddFuncTask<OtcheskovSGaussFilterVertSplitMPI, InType>(
+                                                   kTestFuncParam, PPC_SETTINGS_otcheskov_s_gauss_filter_vert_split),
+                                               ppc::util::AddFuncTask<OtcheskovSGaussFilterVertSplitSEQ, InType>(
+                                                   kTestFuncParam, PPC_SETTINGS_otcheskov_s_gauss_filter_vert_split));
 
 const auto kGtestValidValues = ppc::util::ExpandToValues(kTestValidTasksList);
 const auto kGtestFuncValues = ppc::util::ExpandToValues(kTestFuncTasksList);
 
 const auto kValidFuncTestName = OtcheskovSGaussFilterVertSplitValidationTestsProcesses::PrintFuncTestName<
     OtcheskovSGaussFilterVertSplitValidationTestsProcesses>;
+
 const auto kFuncTestName = OtcheskovSGaussFilterVertSplitFuncTestsProcesses::PrintFuncTestName<
     OtcheskovSGaussFilterVertSplitFuncTestsProcesses>;
 

@@ -50,8 +50,8 @@ bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::Run
         double sum = 0.0;
 
         for (int ky = -1; ky <= 1; ++ky) {
+          int yk = y + ky;
           for (int kx = -1; kx <= 1; ++kx) {
-            int yk = y + ky;
             int xk = x + kx;
 
             if (yk < 0) {
@@ -75,7 +75,7 @@ bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::Run
 
         // Сохранение результата
         int outIdx = GetIndex(y, x, c);
-        output.data[outIdx] = static_cast<uint8_t>(std::clamp(sum, 0.0, 255.0));
+        output.data[outIdx] = static_cast<uint8_t>(std::clamp(std::round(sum), 0.0, 255.0));
       }
     }
   }
