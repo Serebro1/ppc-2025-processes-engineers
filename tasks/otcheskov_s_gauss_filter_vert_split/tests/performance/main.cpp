@@ -37,24 +37,24 @@ InType CreateGradientImage(int width, int height, int channels) {
 }  // namespace
 
 class OtcheskovSGaussFilterVertSplitPerfTests : public ppc::util::BaseRunPerfTests<InType, OutType> {
-  static constexpr int kMatrixSize = 1000;
+  static constexpr int kMatrixSize = 10000;
   InType input_img_;
 
   void SetUp() override {
-    input_img_ = CreateGradientImage(kMatrixSize, kMatrixSize, 1);
+    input_img_ = CreateGradientImage(kMatrixSize, kMatrixSize, 3);
   }
 
   bool CheckTestOutputData(OutType &output_img) final {
     bool is_checked = false;
     if (!ppc::util::IsUnderMpirun()) {
       is_checked = output_img.channels == input_img_.channels && output_img.height == input_img_.height &&
-                   output_img.width == output_img.width;
+                   output_img.width == input_img_.width;
     } else {
       int proc_rank{};
       MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
       if (proc_rank == 0) {
         is_checked = output_img.channels == input_img_.channels && output_img.height == input_img_.height &&
-                     output_img.width == output_img.width;
+                     output_img.width == input_img_.width;
       } else {
         is_checked = true;
       }
