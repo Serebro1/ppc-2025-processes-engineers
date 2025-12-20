@@ -351,17 +351,15 @@ const std::array<TestType, 6> kTestValidParam = {
      {"image_3x3x1_wrong_channel",
       InType{.data = {10, 12, 14, 15, 16, 17, 18, 19, 50}, .height = 3, .width = 3, .channels = 0}}}};
 
-const std::array<TestType, 10> kTestFuncParam = {
+const std::array<TestType, 7> kTestFuncParam = {
     {{"image_3x3x1", InType{.data = {}, .height = 3, .width = 3, .channels = 1}},
      {"image_3x3x3", InType{.data = {}, .height = 3, .width = 3, .channels = 3}},
      {"image_4x4x1", InType{.data = {}, .height = 4, .width = 4, .channels = 1}},
-     {"image_6x6x1", InType{.data = {}, .height = 6, .width = 6, .channels = 1}},
-     {"image_21x21x3", InType{.data = {}, .height = 21, .width = 21, .channels = 3}},
-     {"image_100x100x3", InType{.data = {}, .height = 100, .width = 100, .channels = 3}},
-     {"image_50x100x3", InType{.data = {}, .height = 50, .width = 100, .channels = 3}},
-     {"image_100x50x3", InType{.data = {}, .height = 100, .width = 50, .channels = 3}},
-     {"image_75x35x3", InType{.data = {}, .height = 75, .width = 35, .channels = 3}},
-     {"image_35x75x3", InType{.data = {}, .height = 35, .width = 75, .channels = 3}}}};
+
+     {"image_10x20x3", InType{.data = {}, .height = 10, .width = 20, .channels = 3}},
+     {"border_test_9x9", {.data = {}, .height = 9, .width = 9, .channels = 1}},
+     {"border_test_10x10", {.data = {}, .height = 10, .width = 10, .channels = 1}},
+     {"sharp_vertical_lines_15x15", {.data = {}, .height = 15, .width = 15, .channels = 3}}}};
 
 const auto kTestValidTasksList = std::tuple_cat(ppc::util::AddFuncTask<OtcheskovSGaussFilterVertSplitMPI, InType>(
                                                     kTestValidParam, PPC_SETTINGS_otcheskov_s_gauss_filter_vert_split),

@@ -31,6 +31,8 @@ class OtcheskovSGaussFilterVertSplitMPI : public BaseTask {
 
   int proc_rank_{};
   int proc_num_{};
+  int active_procs_{};
+
   int channels_{};
   int local_width_{};
   int start_col_{};
