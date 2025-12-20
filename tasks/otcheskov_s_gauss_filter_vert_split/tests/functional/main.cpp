@@ -21,6 +21,7 @@
 
 namespace otcheskov_s_gauss_filter_vert_split {
 namespace {
+
 InType ApplyGaussianFilter(const InType &input) {
   const auto &[data, height, width, channels] = input;
   OutType output{.data = std::vector<uint8_t>(data.size()), .height = height, .width = width, .channels = channels};
