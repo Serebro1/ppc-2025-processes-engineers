@@ -73,7 +73,6 @@ bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::Run
           }
         }
 
-        // Сохранение результата
         int outIdx = GetIndex(y, x, c);
         output.data[outIdx] = static_cast<uint8_t>(std::clamp(std::round(sum), 0.0, 255.0));
       }

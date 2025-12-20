@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include <mpi.h>
 #include <stb/stb_image.h>
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb/stb_image_write.h>
 
 #include <algorithm>
@@ -108,7 +110,7 @@ bool CompareImages(const ImageData &expected, const ImageData &actual) {
             << actual.data.size() << " bytes)\n";
 
   if (expected.width != actual.width || expected.height != actual.height || expected.channels != actual.channels) {
-    std::cerr << "!!! SIZE MISMATCH !!!\n";
+    std::cerr << "[ SIZE MISMATCH ]\n";
     return false;
   }
 
@@ -193,15 +195,14 @@ bool CompareImages(const ImageData &expected, const ImageData &actual) {
   return images_equal;
 }
 
-ImageData LoadRgbImageOrThrow(const std::string &task_id, const std::string &file_name) {
+ImageData LoadRgbImage(const std::string &img_path) {
   int width = -1;
   int height = -1;
   int channels_in_file = -1;
 
-  const std::string abs_path = ppc::util::GetAbsoluteTaskPath(task_id, file_name);
-  unsigned char *data = stbi_load(abs_path.c_str(), &width, &height, &channels_in_file, STBI_rgb);
+  unsigned char *data = stbi_load(img_path.c_str(), &width, &height, &channels_in_file, STBI_rgb);
   if (data == nullptr) {
-    throw std::runtime_error("Failed to load image '" + abs_path + "': " + std::string(stbi_failure_reason()));
+    throw std::runtime_error("Failed to load image '" + img_path + "': " + std::string(stbi_failure_reason()));
   }
 
   ImageData img;
@@ -212,13 +213,6 @@ ImageData LoadRgbImageOrThrow(const std::string &task_id, const std::string &fil
   img.data.assign(data, data + bytes);
   stbi_image_free(data);
   return img;
-}
-
-void save_image_as_jpeg(const std::string &filename, const ImageData &img, int quality = 90) {
-  int success = stbi_write_jpg(filename.c_str(), img.width, img.height, img.channels, img.data.data(), quality);
-  if (!success) {
-    throw std::runtime_error("Failed to save image as JPEG: " + filename);
-  }
 }
 
 }  // namespace
@@ -313,29 +307,54 @@ class OtcheskovSGaussFilterVertSplitFuncTestsProcesses : public ppc::util::BaseR
   InType expect_img_;
 };
 
-// class OtcheskovSGaussFilterVertSplitRealTestsProcesses : public ppc::util::BaseRunFuncTests<InType, OutType,
-// TestType> {
-//  public:
-//   static std::string PrintTestParam(const TestType &test_param) {
-//     return std::to_string(std::get<0>(test_param)) + "_" + std::get<1>(test_param);
-//   }
+class OtcheskovSGaussFilterVertSplitRealTestsProcesses : public ppc::util::BaseRunFuncTests<InType, OutType, TestType> {
+ public:
+  static std::string PrintTestParam(const TestType &test_param) {
+    std::string filename = std::get<0>(test_param);
 
-//  protected:
-//   void SetUp() override {
+    size_t dot_pos = filename.find_last_of('.');
+    if (dot_pos != std::string::npos) {
+      filename = filename.substr(0, dot_pos);
+    }
 
-//   }
+    return filename;
+  }
 
-//   bool CheckTestOutputData(OutType &output_data) final {
-//     return false;
-//   }
+ protected:
+  void SetUp() override {
+    try {
+      const TestType &params = std::get<static_cast<std::size_t>(ppc::util::GTestParamIndex::kTestParams)>(GetParam());
+      const std::string &filename = std::get<0>(params);
+      std::string abs_path = ppc::util::GetAbsoluteTaskPath(PPC_ID_otcheskov_s_gauss_filter_vert_split, filename);
+      input_img_ = LoadRgbImage(abs_path);
+      expect_img_ = ApplyGaussianFilter(LoadRgbImage(abs_path));
+    } catch (const std::exception &e) {
+      std::cerr << e.what() << '\n';
+    }
+  }
 
-//   InType GetTestInputData() final {
-//     return input_data_;
-//   }
+  bool CheckTestOutputData(OutType &output_data) final {
+    if (!ppc::util::IsUnderMpirun()) {
+      PrintPixelSample("INPUT IMAGE TOP-LEFT", input_img_, 0, 0);
+      return CompareImages(expect_img_, output_data);
+    }
 
-//  private:
-//   InType input_data_;
-// };
+    int proc_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
+    if (proc_rank == 0) {
+      return CompareImages(expect_img_, output_data);
+    }
+    return true;
+  }
+
+  InType GetTestInputData() final {
+    return input_img_;
+  }
+
+ private:
+  InType input_img_;
+  InType expect_img_;
+};
 
 namespace {
 
@@ -361,6 +380,10 @@ const std::array<TestType, 7> kTestFuncParam = {
      {"border_test_10x10", {.data = {}, .height = 10, .width = 10, .channels = 1}},
      {"sharp_vertical_lines_15x15", {.data = {}, .height = 15, .width = 15, .channels = 3}}}};
 
+const std::array<TestType, 2> kTestRealParam = {
+    {{"chess.jpg", InType{.data = {}, .height = {}, .width = {}, .channels = {}}},
+     {"gradient.jpg", InType{.data = {}, .height = {}, .width = {}, .channels = {}}}}};
+
 const auto kTestValidTasksList = std::tuple_cat(ppc::util::AddFuncTask<OtcheskovSGaussFilterVertSplitMPI, InType>(
                                                     kTestValidParam, PPC_SETTINGS_otcheskov_s_gauss_filter_vert_split),
                                                 ppc::util::AddFuncTask<OtcheskovSGaussFilterVertSplitSEQ, InType>(
@@ -371,14 +394,23 @@ const auto kTestFuncTasksList = std::tuple_cat(ppc::util::AddFuncTask<OtcheskovS
                                                ppc::util::AddFuncTask<OtcheskovSGaussFilterVertSplitSEQ, InType>(
                                                    kTestFuncParam, PPC_SETTINGS_otcheskov_s_gauss_filter_vert_split));
 
+const auto kTestRealTasksList = std::tuple_cat(ppc::util::AddFuncTask<OtcheskovSGaussFilterVertSplitMPI, InType>(
+                                                   kTestRealParam, PPC_SETTINGS_otcheskov_s_gauss_filter_vert_split),
+                                               ppc::util::AddFuncTask<OtcheskovSGaussFilterVertSplitSEQ, InType>(
+                                                   kTestRealParam, PPC_SETTINGS_otcheskov_s_gauss_filter_vert_split));
+
 const auto kGtestValidValues = ppc::util::ExpandToValues(kTestValidTasksList);
 const auto kGtestFuncValues = ppc::util::ExpandToValues(kTestFuncTasksList);
+const auto kGtestRealValues = ppc::util::ExpandToValues(kTestRealTasksList);
 
 const auto kValidFuncTestName = OtcheskovSGaussFilterVertSplitValidationTestsProcesses::PrintFuncTestName<
     OtcheskovSGaussFilterVertSplitValidationTestsProcesses>;
 
 const auto kFuncTestName = OtcheskovSGaussFilterVertSplitFuncTestsProcesses::PrintFuncTestName<
     OtcheskovSGaussFilterVertSplitFuncTestsProcesses>;
+
+const auto kRealTestName = OtcheskovSGaussFilterVertSplitRealTestsProcesses::PrintFuncTestName<
+    OtcheskovSGaussFilterVertSplitRealTestsProcesses>;
 
 TEST_P(OtcheskovSGaussFilterVertSplitValidationTestsProcesses, Validation) {
   ExecuteTest(GetParam());
@@ -388,10 +420,17 @@ TEST_P(OtcheskovSGaussFilterVertSplitFuncTestsProcesses, Functional) {
   ExecuteTest(GetParam());
 }
 
+TEST_P(OtcheskovSGaussFilterVertSplitRealTestsProcesses, RealImages) {
+  ExecuteTest(GetParam());
+}
+
 INSTANTIATE_TEST_SUITE_P(Validation, OtcheskovSGaussFilterVertSplitValidationTestsProcesses, kGtestValidValues,
                          kValidFuncTestName);
 
 INSTANTIATE_TEST_SUITE_P(Functional, OtcheskovSGaussFilterVertSplitFuncTestsProcesses, kGtestFuncValues, kFuncTestName);
+
+INSTANTIATE_TEST_SUITE_P(RealImages, OtcheskovSGaussFilterVertSplitRealTestsProcesses, kGtestRealValues, kRealTestName);
+
 }  // namespace
 
 }  // namespace otcheskov_s_gauss_filter_vert_split

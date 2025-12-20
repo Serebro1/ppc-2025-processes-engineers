@@ -108,7 +108,7 @@ void OtcheskovSGaussFilterVertSplitMPI::DistributeData() {
     std::vector<int> displs(proc_num_, 0);
     const int base_cols = input.width / active_procs_;
     const int remainder = input.width % active_procs_;
-    // Вычисляем распределение данных
+
     int total_data = 0;
     for (int p = 0; p < active_procs_; ++p) {
       const int cols = base_cols + (p < remainder);
@@ -117,7 +117,6 @@ void OtcheskovSGaussFilterVertSplitMPI::DistributeData() {
       total_data += counts[p];
     }
 
-    // Формируем общий буфер
     std::vector<uint8_t> send_buffer(total_data);
     for (int p = 0; p < active_procs_; ++p) {
       const int cols = base_cols + (p < remainder);
@@ -168,7 +167,6 @@ void OtcheskovSGaussFilterVertSplitMPI::ExchangeBoundaryColumns() {
     std::memcpy(&right_col[i * channels_], &local_data_[row_off + (local_width_ - 1) * channels_], channels_);
   }
 
-  // Exchange with neighbors
   MPI_Status status;
   if (left_proc != MPI_PROC_NULL) {
     MPI_Sendrecv(left_col.data(), col_size, MPI_UINT8_T, left_proc, 0, recv_right.data(), col_size, MPI_UINT8_T,
@@ -179,7 +177,6 @@ void OtcheskovSGaussFilterVertSplitMPI::ExchangeBoundaryColumns() {
                  right_proc, 0, MPI_COMM_WORLD, &status);
   }
 
-  // Create extended data
   const int ext_width = local_width_ + 2;
   extended_data_.resize(input.height * ext_width * channels_);
 
@@ -187,17 +184,14 @@ void OtcheskovSGaussFilterVertSplitMPI::ExchangeBoundaryColumns() {
     uint8_t *ext_row = &extended_data_[i * ext_width * channels_];
     const uint8_t *loc_row = &local_data_[i * local_width_ * channels_];
 
-    // Left boundary
     if (proc_rank_ == 0) {
       std::memcpy(ext_row, loc_row, channels_);
     } else {
       std::memcpy(ext_row, &recv_right[i * channels_], channels_);
     }
 
-    // Local data
     std::memcpy(ext_row + channels_, loc_row, local_width_ * channels_);
 
-    // Right boundary
     if (proc_rank_ == active_procs_ - 1) {
       const uint8_t *last_col = &loc_row[(local_width_ - 1) * channels_];
       std::memcpy(ext_row + (ext_width - 1) * channels_, last_col, channels_);
