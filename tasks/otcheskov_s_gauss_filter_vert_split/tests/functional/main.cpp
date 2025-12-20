@@ -2,9 +2,6 @@
 #include <mpi.h>
 #include <stb/stb_image.h>
 
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include <stb/stb_image_write.h>
-
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -58,8 +55,8 @@ InType ApplyGaussianFilter(const InType &input) {
   return output;
 }
 
-ImageData CreateGradientImage(int width, int height, int channels) {
-  ImageData img;
+InType CreateGradientImage(int width, int height, int channels) {
+  InType img;
   img.width = width;
   img.height = height;
   img.channels = channels;
@@ -80,8 +77,7 @@ ImageData CreateGradientImage(int width, int height, int channels) {
   return img;
 }
 
-void PrintPixelSample(const std::string &title, const ImageData &img, int start_row, int start_col,
-                      int sample_size = 3) {
+void PrintPixelSample(const std::string &title, const InType &img, int start_row, int start_col, int sample_size = 3) {
   std::cout << "\n--- " << title << " (rows " << start_row << "-" << start_row + sample_size - 1 << ", cols "
             << start_col << "-" << start_col + sample_size - 1 << ") ---\n";
 
@@ -102,7 +98,7 @@ void PrintPixelSample(const std::string &title, const ImageData &img, int start_
   }
 }
 
-bool CompareImages(const ImageData &expected, const ImageData &actual) {
+bool CompareImages(const InType &expected, const InType &actual) {
   std::cout << "\n===== IMAGE COMPARISON =====\n";
   std::cout << "EXPECTED: " << expected.width << "x" << expected.height << "x" << expected.channels << " ("
             << expected.data.size() << " bytes)\n";
@@ -117,7 +113,7 @@ bool CompareImages(const ImageData &expected, const ImageData &actual) {
   bool images_equal = true;
   size_t diff_count = 0, max_diff = 0;
   std::vector<std::tuple<int, int, int, uint8_t, uint8_t>> diff_samples;
-  std::set<std::pair<int, int>> error_blocks;  // Хранит координаты левых верхних углов блоков с ошибками
+  std::set<std::pair<int, int>> error_blocks;
 
   const size_t total_pixels = expected.width * expected.height * expected.channels;
   for (size_t i = 0; i < total_pixels; ++i) {
@@ -195,7 +191,7 @@ bool CompareImages(const ImageData &expected, const ImageData &actual) {
   return images_equal;
 }
 
-ImageData LoadRgbImage(const std::string &img_path) {
+InType LoadRgbImage(const std::string &img_path) {
   int width = -1;
   int height = -1;
   int channels_in_file = -1;
@@ -205,7 +201,7 @@ ImageData LoadRgbImage(const std::string &img_path) {
     throw std::runtime_error("Failed to load image '" + img_path + "': " + std::string(stbi_failure_reason()));
   }
 
-  ImageData img;
+  InType img;
   img.width = width;
   img.height = height;
   img.channels = STBI_rgb;
