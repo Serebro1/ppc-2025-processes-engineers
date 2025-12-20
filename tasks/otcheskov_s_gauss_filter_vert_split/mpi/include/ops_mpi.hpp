@@ -1,7 +1,11 @@
 #pragma once
 
+#include <cstdint>
+#include <vector>
+
 #include "otcheskov_s_gauss_filter_vert_split/common/include/common.hpp"
 #include "task/include/task.hpp"
+
 namespace otcheskov_s_gauss_filter_vert_split {
 
 class OtcheskovSGaussFilterVertSplitMPI : public BaseTask {
@@ -17,11 +21,10 @@ class OtcheskovSGaussFilterVertSplitMPI : public BaseTask {
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
-  int GetLocalIndex(int row, int local_col, int channel, int width);
+  size_t GetLocalIndex(int row, size_t local_col, int channel, size_t width);
   void BroadcastImgMetadata();
 
   void DistributeData();
-
   void ExchangeBoundaryColumns();
 
   void ApplyGaussianFilter();
@@ -34,9 +37,9 @@ class OtcheskovSGaussFilterVertSplitMPI : public BaseTask {
   int active_procs_{};
 
   int channels_{};
-  int local_width_{};
-  int start_col_{};
-  int local_data_count_{};
+  size_t local_width_{};
+  size_t start_col_{};
+  size_t local_data_count_{};
 
   std::vector<uint8_t> local_data_;
   std::vector<uint8_t> local_output_;

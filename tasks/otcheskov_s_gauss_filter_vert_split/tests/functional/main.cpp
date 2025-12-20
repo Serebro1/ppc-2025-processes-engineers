@@ -4,13 +4,14 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <numeric>
+#include <exception>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <tuple>
-#include <utility>
 #include <vector>
 
 #include "otcheskov_s_gauss_filter_vert_split/common/include/common.hpp"
@@ -26,29 +27,29 @@ InType ApplyGaussianFilter(const InType &input) {
   const auto &[data, height, width, channels] = input;
   OutType output{.data = std::vector<uint8_t>(data.size()), .height = height, .width = width, .channels = channels};
 
-  auto mirrorCoord = [](int i, int size) {
+  auto mirror_coord = [](int i, int size) {
     if (i < 0) {
       return -i - 1;
     }
     if (i >= size) {
-      return 2 * size - i - 1;
+      return (2 * size) - i - 1;
     }
     return i;
   };
 
-  for (int y = 0; y < input.height; ++y) {
-    for (int x = 0; x < input.width; ++x) {
-      for (int c = 0; c < input.channels; ++c) {
+  for (int j = 0; j < input.height; ++j) {
+    for (int i = 0; i < input.width; ++i) {
+      for (int ch = 0; ch < input.channels; ++ch) {
         double sum = 0.0;
         for (int dy = -1; dy <= 1; ++dy) {
           for (int dx = -1; dx <= 1; ++dx) {
-            int srcY = mirrorCoord(y + dy, input.height);
-            int srcX = mirrorCoord(x + dx, input.width);
-            int idx = (srcY * input.width + srcX) * input.channels + c;
-            sum += input.data[idx] * kGaussianKernel[dy + 1][dx + 1];
+            int src_y = mirror_coord(j + dy, input.height);
+            int src_x = mirror_coord(i + dx, input.width);
+            int idx = ((src_y * input.width + src_x) * input.channels) + ch;
+            sum += input.data[idx] * kGaussianKernel.at(dy + 1).at(dx + 1);
           }
         }
-        int out_idx = (y * input.width + x) * input.channels + c;
+        int out_idx = ((j * input.width + i) * input.channels) + ch;
         output.data[out_idx] = static_cast<uint8_t>(std::clamp(std::round(sum), 0.0, 255.0));
       }
     }
@@ -136,7 +137,6 @@ class OtcheskovSGaussFilterVertSplitValidationTestsProcesses
     task_ =
         std::get<static_cast<std::size_t>(::ppc::util::GTestParamIndex::kTaskGetter)>(test_param)(GetTestInputData());
     const TestType &params = std::get<static_cast<std::size_t>(::ppc::util::GTestParamIndex::kTestParams)>(test_param);
-    const std::string param_name = std::get<0>(params);
     task_->GetInput() = std::get<1>(params);
     ExecuteTaskPipeline();
   }
@@ -172,7 +172,7 @@ class OtcheskovSGaussFilterVertSplitFuncTestsProcesses : public ppc::util::BaseR
       return expect_img_ == output_data;
     }
 
-    int proc_rank;
+    int proc_rank{};
     MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
     if (proc_rank == 0) {
       return expect_img_ == output_data;
@@ -220,7 +220,7 @@ class OtcheskovSGaussFilterVertSplitRealTestsProcesses : public ppc::util::BaseR
       return expect_img_ == output_data;
     }
 
-    int proc_rank;
+    int proc_rank{};
     MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
     if (proc_rank == 0) {
       return expect_img_ == output_data;
@@ -292,24 +292,26 @@ const auto kFuncTestName = OtcheskovSGaussFilterVertSplitFuncTestsProcesses::Pri
 const auto kRealTestName = OtcheskovSGaussFilterVertSplitRealTestsProcesses::PrintFuncTestName<
     OtcheskovSGaussFilterVertSplitRealTestsProcesses>;
 
-TEST_P(OtcheskovSGaussFilterVertSplitValidationTestsProcesses, Validation) {
+TEST_P(OtcheskovSGaussFilterVertSplitValidationTestsProcesses, GaussFilterVertSplitValidation) {
   ExecuteTest(GetParam());
 }
 
-TEST_P(OtcheskovSGaussFilterVertSplitFuncTestsProcesses, Functional) {
+TEST_P(OtcheskovSGaussFilterVertSplitFuncTestsProcesses, GaussFilterVertSplitFunc) {
   ExecuteTest(GetParam());
 }
 
-TEST_P(OtcheskovSGaussFilterVertSplitRealTestsProcesses, RealImages) {
+TEST_P(OtcheskovSGaussFilterVertSplitRealTestsProcesses, GaussFilterVertSplitReal) {
   ExecuteTest(GetParam());
 }
 
-INSTANTIATE_TEST_SUITE_P(Validation, OtcheskovSGaussFilterVertSplitValidationTestsProcesses, kGtestValidValues,
-                         kValidFuncTestName);
+INSTANTIATE_TEST_SUITE_P(GaussFilterVertSplitValidation, OtcheskovSGaussFilterVertSplitValidationTestsProcesses,
+                         kGtestValidValues, kValidFuncTestName);
 
-INSTANTIATE_TEST_SUITE_P(Functional, OtcheskovSGaussFilterVertSplitFuncTestsProcesses, kGtestFuncValues, kFuncTestName);
+INSTANTIATE_TEST_SUITE_P(GaussFilterVertSplitFunc, OtcheskovSGaussFilterVertSplitFuncTestsProcesses, kGtestFuncValues,
+                         kFuncTestName);
 
-INSTANTIATE_TEST_SUITE_P(RealImages, OtcheskovSGaussFilterVertSplitRealTestsProcesses, kGtestRealValues, kRealTestName);
+INSTANTIATE_TEST_SUITE_P(GaussFilterVertSplitReal, OtcheskovSGaussFilterVertSplitRealTestsProcesses, kGtestRealValues,
+                         kRealTestName);
 
 }  // namespace
 

@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 
 #include "otcheskov_s_gauss_filter_vert_split/common/include/common.hpp"
 #include "otcheskov_s_gauss_filter_vert_split/mpi/include/ops_mpi.hpp"

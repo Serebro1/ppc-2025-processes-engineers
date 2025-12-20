@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+#include <cstdint>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -29,7 +31,7 @@ using OutType = ImageData;
 using TestType = std::tuple<std::string, InType>;
 using BaseTask = ppc::task::Task<InType, OutType>;
 
-constexpr double kGaussianKernel[3][3] = {
-    {1.0 / 16, 2.0 / 16, 1.0 / 16}, {2.0 / 16, 4.0 / 16, 2.0 / 16}, {1.0 / 16, 2.0 / 16, 1.0 / 16}};
+constexpr std::array<std::array<double, 3>, 3> kGaussianKernel = {
+    {{1.0 / 16, 2.0 / 16, 1.0 / 16}, {2.0 / 16, 4.0 / 16, 2.0 / 16}, {1.0 / 16, 2.0 / 16, 1.0 / 16}}};
 
 }  // namespace otcheskov_s_gauss_filter_vert_split
