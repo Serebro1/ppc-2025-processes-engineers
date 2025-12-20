@@ -78,113 +78,6 @@ InType CreateGradientImage(int width, int height, int channels) {
   return img;
 }
 
-void PrintPixelSample(const std::string &title, const InType &img, int start_row, int start_col, int sample_size = 3) {
-  std::cout << "\n--- " << title << " (rows " << start_row << "-" << start_row + sample_size - 1 << ", cols "
-            << start_col << "-" << start_col + sample_size - 1 << ") ---\n";
-
-  for (int row = 0; row < sample_size && start_row + row < img.height; ++row) {
-    std::cout << "Row " << std::setw(3) << (start_row + row) << ": ";
-    for (int col = 0; col < sample_size && start_col + col < img.width; ++col) {
-      std::cout << "[";
-      for (int ch = 0; ch < img.channels; ++ch) {
-        size_t idx = ((start_row + row) * img.width + (start_col + col)) * img.channels + ch;
-        std::cout << std::setw(3) << static_cast<int>(img.data[idx]);
-        if (ch < img.channels - 1) {
-          std::cout << ",";
-        }
-      }
-      std::cout << "] ";
-    }
-    std::cout << "\n";
-  }
-}
-
-bool CompareImages(const InType &expected, const InType &actual) {
-  std::cout << "\n===== IMAGE COMPARISON =====\n";
-  std::cout << "EXPECTED: " << expected.width << "x" << expected.height << "x" << expected.channels << " ("
-            << expected.data.size() << " bytes)\n";
-  std::cout << "ACTUAL:   " << actual.width << "x" << actual.height << "x" << actual.channels << " ("
-            << actual.data.size() << " bytes)\n";
-
-  if (expected.width != actual.width || expected.height != actual.height || expected.channels != actual.channels) {
-    std::cerr << "[ SIZE MISMATCH ]\n";
-    return false;
-  }
-
-  bool images_equal = true;
-  size_t diff_count = 0, max_diff = 0;
-  std::vector<std::tuple<int, int, int, uint8_t, uint8_t>> diff_samples;
-  std::set<std::pair<int, int>> error_blocks;
-
-  const size_t total_pixels = expected.width * expected.height * expected.channels;
-  for (size_t i = 0; i < total_pixels; ++i) {
-    if (expected.data[i] != actual.data[i]) {
-      images_equal = false;
-      diff_count++;
-
-      size_t pixel_idx = i / expected.channels;
-      int row = pixel_idx / expected.width;
-      int col = pixel_idx % expected.width;
-      int channel = i % expected.channels;
-
-      uint8_t expected_val = expected.data[i];
-      uint8_t actual_val = actual.data[i];
-      size_t diff = std::abs(static_cast<int>(expected_val) - static_cast<int>(actual_val));
-
-      if (diff > max_diff) {
-        max_diff = diff;
-      }
-
-      int block_row = (row / 3) * 3;
-      int block_col = (col / 3) * 3;
-
-      if (block_row + 2 < expected.height && block_col + 2 < expected.width) {
-        error_blocks.insert({block_row, block_col});
-      }
-
-      if (diff_samples.size() < 5) {
-        diff_samples.emplace_back(row, col, channel, expected_val, actual_val);
-      }
-      if (diff_count > 100) {
-        break;
-      }
-    }
-  }
-
-  if (images_equal) {
-    std::cout << "\n[ IMAGES ARE IDENTICAL ]\n";
-  } else {
-    std::cout << "\n[ IMAGES ARE NOT EQUAL ]\n";
-    std::cout << "Total differences found: " << diff_count << "\n";
-    std::cout << "Maximum pixel difference: " << max_diff << "\n";
-    std::cout << "Error blocks found: " << error_blocks.size() << "\n";
-
-    if (!error_blocks.empty()) {
-      std::cout << "\n=== BLOCKS WITH ERRORS (3x3) ===\n";
-      int block_num = 1;
-      for (const auto &[block_row, block_col] : error_blocks) {
-        if (block_num > 5) {
-          std::cout << "  ... and " << (error_blocks.size() - 5) << " more error blocks\n";
-          break;
-        }
-
-        std::cout << "\n--- ERROR BLOCK #" << block_num << " (rows " << block_row << "-" << block_row + 2 << ", cols "
-                  << block_col << "-" << block_col + 2 << ") ---\n";
-
-        std::cout << "EXPECTED:\n";
-        PrintPixelSample("EXPECTED BLOCK", expected, block_row, block_col, 3);
-
-        std::cout << "ACTUAL:\n";
-        PrintPixelSample("ACTUAL BLOCK", actual, block_row, block_col, 3);
-
-        block_num++;
-      }
-    }
-  }
-  std::cout << "============================\n" << std::endl;
-  return images_equal;
-}
-
 InType LoadRgbImage(const std::string &img_path) {
   int width = -1;
   int height = -1;
@@ -276,13 +169,13 @@ class OtcheskovSGaussFilterVertSplitFuncTestsProcesses : public ppc::util::BaseR
 
   bool CheckTestOutputData(OutType &output_data) final {
     if (!ppc::util::IsUnderMpirun()) {
-      return CompareImages(expect_img_, output_data);
+      return expect_img_ == output_data;
     }
 
     int proc_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
     if (proc_rank == 0) {
-      return CompareImages(expect_img_, output_data);
+      return expect_img_ == output_data;
     }
     return true;
   }
@@ -324,13 +217,13 @@ class OtcheskovSGaussFilterVertSplitRealTestsProcesses : public ppc::util::BaseR
 
   bool CheckTestOutputData(OutType &output_data) final {
     if (!ppc::util::IsUnderMpirun()) {
-      return CompareImages(expect_img_, output_data);
+      return expect_img_ == output_data;
     }
 
     int proc_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
     if (proc_rank == 0) {
-      return CompareImages(expect_img_, output_data);
+      return expect_img_ == output_data;
     }
     return true;
   }
@@ -362,7 +255,6 @@ const std::array<TestType, 7> kTestFuncParam = {
     {{"image_3x3x1", InType{.data = {}, .height = 3, .width = 3, .channels = 1}},
      {"image_3x3x3", InType{.data = {}, .height = 3, .width = 3, .channels = 3}},
      {"image_4x4x1", InType{.data = {}, .height = 4, .width = 4, .channels = 1}},
-
      {"image_10x20x3", InType{.data = {}, .height = 10, .width = 20, .channels = 3}},
      {"border_test_9x9", {.data = {}, .height = 9, .width = 9, .channels = 1}},
      {"border_test_10x10", {.data = {}, .height = 10, .width = 10, .channels = 1}},
