@@ -8,6 +8,7 @@
 
 namespace otcheskov_s_gauss_filter_vert_split {
 
+#pragma pack(push, 1)
 struct ImageData {
   std::vector<uint8_t> data;
   int height{};
@@ -21,6 +22,7 @@ struct ImageData {
     return !(*this == other);
   }
 };
+#pragma pack(pop)
 
 using InType = ImageData;
 using OutType = ImageData;
