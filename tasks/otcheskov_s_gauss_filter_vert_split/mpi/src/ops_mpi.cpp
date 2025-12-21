@@ -90,7 +90,7 @@ void OtcheskovSGaussFilterVertSplitMPI::DistributeData() {
     const size_t remain = width % active_procs_;
     const auto &[counts, displs] = GetCountsAndDisplacements(height, width);
 
-    std::vector<uint8_t> send_buffer(counts.back() + displs.back());
+    std::vector<uint8_t> send_buffer(counts[active_procs_ - 1] + displs[active_procs_ - 1]);
     for (size_t proc = 0; proc < active_procs_; ++proc) {
       const size_t cols = base_cols + (proc < remain ? 1 : 0);
       const size_t start_col = (base_cols * proc) + std::min(proc, remain);
