@@ -26,14 +26,17 @@ class OtcheskovSGaussFilterVertSplitMPI : public BaseTask {
   void DistributeData();
   void CalcLocalDims(const size_t &width);
   [[nodiscard]] std::pair<std::vector<int>, std::vector<int>> GetCountsAndDisplacements(const size_t &height,
-                                                                                        const size_t &width) const;
+                                                                                        const size_t &width,
+                                                                                        const size_t &channels) const;
 
   void ExchangeBoundaryColumns();
 
   void ApplyGaussianFilter();
-  [[nodiscard]] size_t GetLocalIndex(size_t row, size_t local_col, size_t channel, size_t width) const;
-  static size_t MirrorCoord(size_t current, int off, size_t size);
-  uint8_t ProcessPixel(size_t row, size_t local_col, size_t ch, size_t height);
+  [[nodiscard]] size_t GetLocalIndex(const size_t &row, const size_t &local_col, const size_t &channel,
+                                     const size_t &width, const size_t &channels) const;
+  static size_t MirrorCoord(const size_t &current, int off, const size_t &size);
+  uint8_t ProcessPixel(const size_t &row, const size_t &local_col, const size_t &ch, const size_t &height,
+                       const size_t &channels);
   void CollectResults();
 
   bool is_valid_{};
@@ -41,7 +44,6 @@ class OtcheskovSGaussFilterVertSplitMPI : public BaseTask {
   size_t proc_num_{};
   size_t active_procs_{};
 
-  size_t channels_{};
   size_t local_width_{};
   size_t start_col_{};
   size_t local_data_count_{};
