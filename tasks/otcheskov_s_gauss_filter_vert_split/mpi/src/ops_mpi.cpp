@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <utility>
 #include <vector>
 
 #include "otcheskov_s_gauss_filter_vert_split/common/include/common.hpp"
@@ -50,7 +51,7 @@ bool OtcheskovSGaussFilterVertSplitMPI::RunImpl() {
   auto &[metadata, data] = GetInput();
   MPI_Bcast(&metadata, sizeof(ImageMetadata), MPI_BYTE, 0, MPI_COMM_WORLD);
 
-  if (is_valid_ == false) {
+  if (!is_valid_) {
     return false;
   }
 
@@ -75,15 +76,7 @@ void OtcheskovSGaussFilterVertSplitMPI::DistributeData() {
 
   active_procs_ = std::min(proc_num_, width);
 
-  if (proc_rank_ < active_procs_) {
-    const size_t base_cols = width / active_procs_;
-    const size_t remain = width % active_procs_;
-    local_width_ = base_cols + (proc_rank_ < remain ? 1 : 0);
-    start_col_ = (base_cols * proc_rank_) + std::min(proc_rank_, remain);
-  } else {
-    local_width_ = 0;
-    start_col_ = 0;
-  }
+  CalcLocalDims(width);
 
   local_data_count_ = height * local_width_ * channels_;
 
@@ -93,27 +86,18 @@ void OtcheskovSGaussFilterVertSplitMPI::DistributeData() {
   local_data_.resize(local_data_count_);
 
   if (proc_rank_ == 0) {
-    const size_t row_size = width * channels_;
-    std::vector<int> counts(proc_num_, 0);
-    std::vector<int> displs(proc_num_, 0);
     const size_t base_cols = width / active_procs_;
     const size_t remain = width % active_procs_;
+    const auto &[counts, displs] = GetCountsAndDisplacements(height, width);
 
-    int total_data = 0;
-    for (size_t proc = 0; proc < active_procs_; ++proc) {
-      const size_t cols = base_cols + (proc < remain ? 1 : 0);
-      counts[proc] = static_cast<int>(height) * cols * channels_;
-      displs[proc] = total_data;
-      total_data += counts[proc];
-    }
-
-    std::vector<uint8_t> send_buffer(total_data);
+    std::vector<uint8_t> send_buffer(counts.back() + displs.back());
     for (size_t proc = 0; proc < active_procs_; ++proc) {
       const size_t cols = base_cols + (proc < remain ? 1 : 0);
       const size_t start_col = (base_cols * proc) + std::min(proc, remain);
       uint8_t *buf_ptr = send_buffer.data() + displs[proc];
 
       for (size_t row = 0; row < height; ++row) {
+        const size_t row_size = width * channels_;
         const size_t row_offset = row * row_size;
         const size_t col_offset = start_col * channels_;
         const uint8_t *src_row = in_data.data() + row_offset + col_offset;
@@ -122,12 +106,43 @@ void OtcheskovSGaussFilterVertSplitMPI::DistributeData() {
       }
     }
 
-    MPI_Scatterv(send_buffer.data(), counts.data(), displs.data(), MPI_UINT8_T, local_data_.data(), local_data_count_,
-                 MPI_UINT8_T, 0, MPI_COMM_WORLD);
+    MPI_Scatterv(send_buffer.data(), counts.data(), displs.data(), MPI_UINT8_T, local_data_.data(),
+                 static_cast<int>(local_data_count_), MPI_UINT8_T, 0, MPI_COMM_WORLD);
   } else {
-    MPI_Scatterv(nullptr, nullptr, nullptr, MPI_DATATYPE_NULL, local_data_.data(), local_data_count_, MPI_UINT8_T, 0,
-                 MPI_COMM_WORLD);
+    MPI_Scatterv(nullptr, nullptr, nullptr, MPI_DATATYPE_NULL, local_data_.data(), static_cast<int>(local_data_count_),
+                 MPI_UINT8_T, 0, MPI_COMM_WORLD);
   }
+}
+
+void OtcheskovSGaussFilterVertSplitMPI::CalcLocalDims(const size_t &width) {
+  if (proc_rank_ < active_procs_) {
+    const size_t base_cols = width / active_procs_;
+    const size_t remain = width % active_procs_;
+    local_width_ = base_cols + (proc_rank_ < remain ? 1 : 0);
+    start_col_ = (base_cols * proc_rank_) + std::min(proc_rank_, remain);
+  } else {
+    local_width_ = 0;
+    start_col_ = 0;
+  }
+}
+
+std::pair<std::vector<int>, std::vector<int>> OtcheskovSGaussFilterVertSplitMPI::GetCountsAndDisplacements(
+    const size_t &height, const size_t &width) const {
+  std::vector<int> counts(proc_num_, 0);
+  std::vector<int> displs(proc_num_, 0);
+
+  const size_t base_cols = width / active_procs_;
+  const size_t remain = width % active_procs_;
+
+  int total_data = 0;
+  for (size_t proc = 0; proc < active_procs_; ++proc) {
+    const size_t cols = base_cols + (proc < remain ? 1 : 0);
+    counts[proc] = static_cast<int>(height * cols * channels_);
+    displs[proc] = total_data;
+    total_data += counts[proc];
+  }
+
+  return {counts, displs};
 }
 
 void OtcheskovSGaussFilterVertSplitMPI::ExchangeBoundaryColumns() {
@@ -144,10 +159,10 @@ void OtcheskovSGaussFilterVertSplitMPI::ExchangeBoundaryColumns() {
   int right_proc = MPI_PROC_NULL;
 
   if (proc_rank_ > 0 && proc_rank_ < active_procs_) {
-    left_proc = proc_rank_ - 1;
+    left_proc = static_cast<int>(proc_rank_) - 1;
   }
   if (proc_rank_ < active_procs_ - 1) {
-    right_proc = proc_rank_ + 1;
+    right_proc = static_cast<int>(proc_rank_) + 1;
   }
 
   std::vector<uint8_t> left_col(col_size);
@@ -160,17 +175,17 @@ void OtcheskovSGaussFilterVertSplitMPI::ExchangeBoundaryColumns() {
     const size_t dst_offset = i * channels_;
 
     std::memcpy(&left_col[dst_offset], &local_data_[row_off], channels_);
-    std::memcpy(&right_col[dst_offset], &local_data_[row_off + (local_width_ - 1) * channels_], channels_);
+    std::memcpy(&right_col[dst_offset], &local_data_[row_off + ((local_width_ - 1) * channels_)], channels_);
   }
 
   MPI_Status status;
   if (left_proc != MPI_PROC_NULL) {
-    MPI_Sendrecv(left_col.data(), col_size, MPI_UINT8_T, left_proc, 0, recv_right.data(), col_size, MPI_UINT8_T,
-                 left_proc, 1, MPI_COMM_WORLD, &status);
+    MPI_Sendrecv(left_col.data(), static_cast<int>(col_size), MPI_UINT8_T, left_proc, 0, recv_right.data(),
+                 static_cast<int>(col_size), MPI_UINT8_T, left_proc, 1, MPI_COMM_WORLD, &status);
   }
   if (right_proc != MPI_PROC_NULL) {
-    MPI_Sendrecv(right_col.data(), col_size, MPI_UINT8_T, right_proc, 1, recv_left.data(), col_size, MPI_UINT8_T,
-                 right_proc, 0, MPI_COMM_WORLD, &status);
+    MPI_Sendrecv(right_col.data(), static_cast<int>(col_size), MPI_UINT8_T, right_proc, 1, recv_left.data(),
+                 static_cast<int>(col_size), MPI_UINT8_T, right_proc, 0, MPI_COMM_WORLD, &status);
   }
 
   const size_t ext_width = local_width_ + 2;
@@ -203,49 +218,54 @@ void OtcheskovSGaussFilterVertSplitMPI::ApplyGaussianFilter() {
     local_output_.shrink_to_fit();
     return;
   }
-
   const auto &[in_meta, in_data] = GetInput();
-  const size_t extended_width = local_width_ + 2;
-
   local_output_.resize(local_data_count_);
-
-  auto mirror_coord = [](size_t curr, int off, size_t size) -> size_t {
-    ptrdiff_t pos = static_cast<ptrdiff_t>(curr) + off;
-    if (pos < 0) {
-      return static_cast<size_t>(-pos - 1);
-    }
-    if (static_cast<size_t>(pos) >= size) {
-      return 2 * size - static_cast<size_t>(pos) - 1;
-    }
-    return static_cast<size_t>(pos);
-  };
 
   for (size_t row = 0; row < in_meta.height; ++row) {
     for (size_t local_col = 0; local_col < local_width_; ++local_col) {
-      const size_t ext_col = local_col + 1;
       for (size_t ch = 0; ch < channels_; ++ch) {
-        double sum = 0.0;
-
-        for (int ky = -1; ky <= 1; ++ky) {
-          const size_t data_row = mirror_coord(row, ky, in_meta.height);
-          for (int kx = -1; kx <= 1; ++kx) {
-            const size_t data_col = ext_col + kx;
-            const size_t idx = GetLocalIndex(data_row, data_col, ch, extended_width);
-            sum += extended_data_[idx] * kGaussianKernel.at(ky + 1).at(kx + 1);
-          }
-        }
-
-        local_output_[GetLocalIndex(row, local_col, ch, local_width_)] =
-            static_cast<uint8_t>(std::clamp(std::round(sum), 0.0, 255.0));
+        const size_t out_idx = GetLocalIndex(row, local_col, ch, local_width_);
+        local_output_[out_idx] = ProcessPixel(row, local_col, ch, in_meta.height);
       }
     }
   }
 }
 
-size_t OtcheskovSGaussFilterVertSplitMPI::GetLocalIndex(size_t row, size_t local_col, size_t channel, size_t width) {
+size_t OtcheskovSGaussFilterVertSplitMPI::GetLocalIndex(size_t row, size_t local_col, size_t channel,
+                                                        size_t width) const {
   return ((row * width + local_col) * channels_) + channel;
 }
 
+size_t OtcheskovSGaussFilterVertSplitMPI::MirrorCoord(size_t current, int off, size_t size) {
+  int64_t pos = static_cast<int64_t>(current) + off;
+  if (pos < 0) {
+    return static_cast<size_t>(-pos - 1);
+  }
+  if (std::cmp_greater_equal(static_cast<size_t>(pos), size)) {
+    return (2 * size) - static_cast<size_t>(pos) - 1;
+  }
+  return static_cast<size_t>(pos);
+}
+
+uint8_t OtcheskovSGaussFilterVertSplitMPI::ProcessPixel(size_t row, size_t local_col, size_t ch, size_t height) {
+  double sum = 0.0;
+  const size_t extended_width = local_width_ + 2;
+  const size_t ext_col = local_col + 1;
+
+  for (int ky = -1; ky <= 1; ++ky) {
+    const size_t data_row = MirrorCoord(row, ky, height);
+
+    for (int kx = -1; kx <= 1; ++kx) {
+      const size_t data_col = ext_col + kx;
+      const size_t idx = GetLocalIndex(data_row, data_col, ch, extended_width);
+
+      if (idx < extended_data_.size()) {
+        sum += extended_data_[idx] * kGaussianKernel.at(ky + 1).at(kx + 1);
+      }
+    }
+  }
+  return static_cast<uint8_t>(std::clamp(std::round(sum), 0.0, 255.0));
+}
 void OtcheskovSGaussFilterVertSplitMPI::CollectResults() {
   const auto &[in_meta, data] = GetInput();
   const size_t base_cols = in_meta.width / active_procs_;
@@ -258,15 +278,15 @@ void OtcheskovSGaussFilterVertSplitMPI::CollectResults() {
   int total_data = 0;
   for (size_t proc = 0; proc < active_procs_; ++proc) {
     const size_t cols = base_cols + (proc < remain ? 1 : 0);
-    counts[proc] = static_cast<int>(in_meta.height) * cols * channels_;
+    counts[proc] = static_cast<int>(in_meta.height * cols * channels_);
     displs[proc] = total_data;
     total_data += counts[proc];
   }
 
   if (proc_rank_ == 0) {
     std::vector<uint8_t> recv_buffer(total_data);
-    MPI_Gatherv(local_output_.data(), local_data_count_, MPI_UINT8_T, recv_buffer.data(), counts.data(), displs.data(),
-                MPI_UINT8_T, 0, MPI_COMM_WORLD);
+    MPI_Gatherv(local_output_.data(), static_cast<int>(local_data_count_), MPI_UINT8_T, recv_buffer.data(),
+                counts.data(), displs.data(), MPI_UINT8_T, 0, MPI_COMM_WORLD);
 
     for (size_t i = 0; i < in_meta.height; ++i) {
       int buffer_offset = 0;
@@ -281,8 +301,8 @@ void OtcheskovSGaussFilterVertSplitMPI::CollectResults() {
       }
     }
   } else {
-    MPI_Gatherv(local_output_.data(), local_data_count_, MPI_UINT8_T, nullptr, nullptr, nullptr, MPI_UINT8_T, 0,
-                MPI_COMM_WORLD);
+    MPI_Gatherv(local_output_.data(), static_cast<int>(local_data_count_), MPI_UINT8_T, nullptr, nullptr, nullptr,
+                MPI_UINT8_T, 0, MPI_COMM_WORLD);
   }
 }
 

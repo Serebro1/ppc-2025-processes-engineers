@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <utility>
 
 #include "otcheskov_s_gauss_filter_vert_split/common/include/common.hpp"
 
@@ -47,7 +48,6 @@ bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::Run
 
   const auto process_pixel = [&](size_t row, size_t col, size_t ch) -> uint8_t {
     double sum = 0.0;
-
     for (int dy = -1; dy <= 1; ++dy) {
       size_t src_y = MirrorCoord(row, dy, height);
       for (int dx = -1; dx <= 1; ++dx) {
@@ -57,7 +57,6 @@ bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::Run
         sum += weight * in_data[src_idx];
       }
     }
-
     return static_cast<uint8_t>(std::clamp(std::round(sum), 0.0, 255.0));
   };
 
