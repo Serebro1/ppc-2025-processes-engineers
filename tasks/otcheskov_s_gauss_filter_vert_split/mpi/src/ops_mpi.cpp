@@ -231,7 +231,7 @@ void OtcheskovSGaussFilterVertSplitMPI::ApplyGaussianFilter() {
 
 size_t OtcheskovSGaussFilterVertSplitMPI::GetLocalIndex(const size_t &row, const size_t &local_col,
                                                         const size_t &channel, const size_t &width,
-                                                        const size_t &channels) const {
+                                                        const size_t &channels) {
   return ((row * width + local_col) * channels) + channel;
 }
 
