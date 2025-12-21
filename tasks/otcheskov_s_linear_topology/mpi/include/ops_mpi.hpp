@@ -18,8 +18,11 @@ class OtcheskovSLinearTopologyMPI : public BaseTask {
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
-  static void SendMessageMPI(int dest, const Message &msg, int tag);
-  static Message RecvMessageMPI(int src, int tag);
+  static void SendData(int dest, int size, const MessageData &data, int tag);
+  static MessageData RecvData(int src, int size, int tag);
+
+  static void SendHeader(int dest, const MessageHeader &header, int tag);
+  static MessageHeader RecvHeader(int src, int tag);
 
   [[nodiscard]] static Message ForwardMessageToDest(const Message &initial_msg, int prev, int next, bool is_src,
                                                     bool is_dest);

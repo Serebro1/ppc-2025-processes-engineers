@@ -16,7 +16,7 @@ class OtcheskovSLinearTopologyPerfTests : public ppc::util::BaseRunPerfTests<InT
   InType input_msg_;
 
   void SetUp() override {
-    input_msg_.first = {.delivered = 0, .src = 0, .dest = 0, .data_size = 0};
+    input_msg_.first = {.delivered = 0, .src = 0, .dest = 0, .data_size = kDataSize};
     if (ppc::util::IsUnderMpirun()) {
       int proc_size{};
       MPI_Comm_size(MPI_COMM_WORLD, &proc_size);

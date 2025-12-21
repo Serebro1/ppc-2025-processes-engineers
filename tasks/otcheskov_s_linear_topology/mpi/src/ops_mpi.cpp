@@ -48,41 +48,26 @@ bool OtcheskovSLinearTopologyMPI::PreProcessingImpl() {
   return true;
 }
 
-void OtcheskovSLinearTopologyMPI::SendMessageMPI(int dest, const Message &msg, int tag) {
-  const auto &[header, data] = msg;
-  MPI_Send(&header, sizeof(MessageHeader), MPI_BYTE, dest, tag, MPI_COMM_WORLD);
-
-  if (header.data_size > 0) {
-    MPI_Send(data.data(), header.data_size, MPI_INT, dest, tag + kDataTagOffset, MPI_COMM_WORLD);
-  }
-}
-
-Message OtcheskovSLinearTopologyMPI::RecvMessageMPI(int src, int tag) {
-  MessageHeader header;
-  MPI_Status status;
-  MPI_Recv(&header, sizeof(MessageHeader), MPI_BYTE, src, tag, MPI_COMM_WORLD, &status);
-
-  MessageData data;
-  if (header.data_size > 0) {
-    data.resize(header.data_size);
-    MPI_Recv(data.data(), header.data_size, MPI_INT, src, tag + kDataTagOffset, MPI_COMM_WORLD, &status);
-  }
-  return {header, std::move(data)};
-}
-
 Message OtcheskovSLinearTopologyMPI::ForwardMessageToDest(const Message &initial_msg, int prev, int next, bool is_src,
                                                           bool is_dest) {
-  Message current_msg = is_src ? initial_msg : RecvMessageMPI(prev, kMessageTag);
+  Message current_msg;
+  auto &[header, data] = current_msg;
+  if (!is_src) {
+    header = RecvHeader(prev, kMessageTag);
+    data = RecvData(prev, header.data_size, kMessageTag);
+  } else {
+    current_msg = initial_msg;
+  }
 
   if (!is_dest) {
-    SendMessageMPI(next, current_msg, kMessageTag);
+    SendHeader(next, header, kMessageTag);
+    SendData(next, header.data_size, data, kMessageTag);
     if (!is_src) {
-      current_msg.second.clear();
-      current_msg.second.shrink_to_fit();
-      current_msg.first.data_size = 0;
+      data.clear();
+      data.shrink_to_fit();
     }
   } else {
-    current_msg.first.delivered = 1;
+    header.delivered = 1;
   }
   return current_msg;
 }
@@ -90,17 +75,38 @@ Message OtcheskovSLinearTopologyMPI::ForwardMessageToDest(const Message &initial
 Message OtcheskovSLinearTopologyMPI::HandleConfirmToSource(Message &current_msg, int prev, int next, bool is_src,
                                                            bool is_dest) {
   if (is_dest) {
-    SendMessageMPI(prev, current_msg, kConfirmTag);
+    MessageHeader confirm_header = current_msg.first;
+    SendHeader(prev, confirm_header, kConfirmTag);
   } else {
-    Message confirmation = RecvMessageMPI(next, kConfirmTag);
-
+    MessageHeader confirm_header = RecvHeader(next, kConfirmTag);
     if (is_src) {
-      current_msg.first.delivered = confirmation.first.delivered;
+      current_msg.first.delivered = confirm_header.delivered;
     } else {
-      SendMessageMPI(prev, confirmation, kConfirmTag);
+      SendHeader(prev, confirm_header, kConfirmTag);
     }
   }
   return current_msg;
+}
+
+void OtcheskovSLinearTopologyMPI::SendHeader(int dest, const MessageHeader &header, int tag) {
+  MPI_Send(&header, sizeof(MessageHeader), MPI_BYTE, dest, tag, MPI_COMM_WORLD);
+}
+
+MessageHeader OtcheskovSLinearTopologyMPI::RecvHeader(int src, int tag) {
+  MessageHeader header;
+  MPI_Recv(&header, sizeof(MessageHeader), MPI_BYTE, src, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+  return header;
+}
+
+void OtcheskovSLinearTopologyMPI::SendData(int dest, int size, const MessageData &data, int tag) {
+  MPI_Send(data.data(), size, MPI_INT, dest, tag + kDataTagOffset, MPI_COMM_WORLD);
+}
+
+MessageData OtcheskovSLinearTopologyMPI::RecvData(int src, int size, int tag) {
+  MessageData data;
+  data.resize(size);
+  MPI_Recv(data.data(), size, MPI_INT, src, tag + kDataTagOffset, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+  return data;
 }
 
 Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) const {
@@ -127,7 +133,6 @@ Message OtcheskovSLinearTopologyMPI::SendMessageLinear(const Message &msg) const
   const int next = is_dest ? MPI_PROC_NULL : proc_rank_ + direction;
 
   Message current_msg = ForwardMessageToDest({header, std::move(data)}, prev, next, is_src, is_dest);
-
   // пересылка подтверждения
   return HandleConfirmToSource(current_msg, prev, next, is_src, is_dest);
 }
@@ -163,7 +168,6 @@ bool OtcheskovSLinearTopologyMPI::RunImpl() {
   } else {
     check_passed = true;
   }
-
   GetOutput() = result_msg;
   return check_passed;
 }
