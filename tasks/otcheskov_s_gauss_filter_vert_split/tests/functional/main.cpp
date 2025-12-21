@@ -36,7 +36,7 @@ InType ApplyGaussianFilter(const InType &input) {
     if (pos < 0) {
       return static_cast<size_t>(-pos - 1);
     }
-    if (std::cmp_greater_equal(static_cast<uint64_t>(pos), size)) {
+    if (std::cmp_greater_equal(static_cast<size_t>(pos), size)) {
       return static_cast<size_t>((2 * size) - pos - 1);
     }
     return static_cast<size_t>(pos);
