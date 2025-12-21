@@ -21,22 +21,21 @@ class OtcheskovSGaussFilterVertSplitMPI : public BaseTask {
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
-  size_t GetLocalIndex(int row, size_t local_col, int channel, size_t width);
-  void BroadcastImgMetadata();
+  size_t GetLocalIndex(size_t row, size_t local_col, size_t channel, size_t width);
 
   void DistributeData();
   void ExchangeBoundaryColumns();
 
   void ApplyGaussianFilter();
-  int MirrorRow(int row, int height);
 
   void CollectResults();
 
-  int proc_rank_{};
-  int proc_num_{};
-  int active_procs_{};
+  bool is_valid_{};
+  size_t proc_rank_{};
+  size_t proc_num_{};
+  size_t active_procs_{};
 
-  int channels_{};
+  size_t channels_{};
   size_t local_width_{};
   size_t start_col_{};
   size_t local_data_count_{};

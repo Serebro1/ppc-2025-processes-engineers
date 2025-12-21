@@ -13,49 +13,43 @@
 
 namespace otcheskov_s_gauss_filter_vert_split {
 namespace {
-InType CreateGradientImage(int width, int height, int channels) {
-  InType img;
-  img.width = width;
-  img.height = height;
-  img.channels = channels;
+InType CreateGradientImage(ImageMetadata img_metadata) {
+  ImageData img_data;
+  const auto &[height, width, channels] = img_metadata;
+  const size_t pixel_count = width * height * channels;
+  img_data.resize(pixel_count);
 
-  const size_t pixel_count = static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(channels);
-  img.data.resize(pixel_count);
-
-  for (int row = 0; row < height; ++row) {
-    for (int col = 0; col < width; ++col) {
-      for (int ch = 0; ch < channels; ++ch) {
-        const size_t idx = (static_cast<size_t>(row) * static_cast<size_t>(width) * static_cast<size_t>(channels)) +
-                           (static_cast<size_t>(col) * static_cast<size_t>(channels)) + static_cast<size_t>(ch);
-        img.data[idx] = static_cast<uint8_t>((col * 2 + row + ch * 50) % 256);
+  for (size_t row = 0; row < height; ++row) {
+    for (size_t col = 0; col < width; ++col) {
+      for (size_t ch = 0; ch < channels; ++ch) {
+        const size_t idx = (row * width * channels) + (col * channels) + ch;
+        img_data[idx] = static_cast<uint8_t>((col * 2 + row + ch * 50) % 256);
       }
     }
   }
 
-  return img;
+  return {img_metadata, img_data};
 }
 
 }  // namespace
 
 class OtcheskovSGaussFilterVertSplitPerfTests : public ppc::util::BaseRunPerfTests<InType, OutType> {
-  static constexpr int kMatrixSize = 10000;
+  static constexpr size_t kMatrixSize = 10000;
   InType input_img_;
 
   void SetUp() override {
-    input_img_ = CreateGradientImage(kMatrixSize, kMatrixSize, 3);
+    input_img_ = CreateGradientImage(ImageMetadata{kMatrixSize, kMatrixSize, 3});
   }
 
   bool CheckTestOutputData(OutType &output_img) final {
     bool is_checked = false;
     if (!ppc::util::IsUnderMpirun()) {
-      is_checked = output_img.channels == input_img_.channels && output_img.height == input_img_.height &&
-                   output_img.width == input_img_.width;
+      is_checked = output_img.first == input_img_.first;
     } else {
       int proc_rank{};
       MPI_Comm_rank(MPI_COMM_WORLD, &proc_rank);
       if (proc_rank == 0) {
-        is_checked = output_img.channels == input_img_.channels && output_img.height == input_img_.height &&
-                     output_img.width == input_img_.width;
+        is_checked = output_img.first == input_img_.first;
       } else {
         is_checked = true;
       }

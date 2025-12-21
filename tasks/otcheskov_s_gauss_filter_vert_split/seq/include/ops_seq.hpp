@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+
 #include "otcheskov_s_gauss_filter_vert_split/common/include/common.hpp"
 #include "task/include/task.hpp"
 
@@ -18,7 +20,7 @@ class OtcheskovSGaussFilterVertSplitSEQ : public BaseTask {
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
-  int GetIndex(int row, int col, int channel);
+  size_t GetIndex(size_t row, size_t col, size_t channel);
 };
 
 }  // namespace otcheskov_s_gauss_filter_vert_split

@@ -22,61 +22,62 @@
 
 namespace otcheskov_s_gauss_filter_vert_split {
 namespace {
-
 InType ApplyGaussianFilter(const InType &input) {
-  const auto &[data, height, width, channels] = input;
-  OutType output{.data = std::vector<uint8_t>(data.size()), .height = height, .width = width, .channels = channels};
+  const auto &[metadata, image_data] = input;
+  const auto &[height, width, channels] = metadata;
+  const auto &data = image_data;
 
-  auto mirror_coord = [](int i, int size) {
-    if (i < 0) {
-      return -i - 1;
+  ImageMetadata out_metadata = metadata;
+  ImageData out_data = std::vector<uint8_t>(data.size());
+
+  auto mirror_coord = [](size_t curr, int off, size_t size) {
+    long long pos = static_cast<long long>(curr) + off;
+    if (pos < 0) {
+      return static_cast<size_t>(-pos - 1);
     }
-    if (i >= size) {
-      return (2 * size) - i - 1;
+    if (static_cast<size_t>(pos) >= size) {
+      return static_cast<size_t>((2 * size) - pos - 1);
     }
-    return i;
+    return static_cast<size_t>(pos);
   };
 
-  for (int j = 0; j < input.height; ++j) {
-    for (int i = 0; i < input.width; ++i) {
-      for (int ch = 0; ch < input.channels; ++ch) {
+  const size_t row_stride = width * channels;
+
+  for (size_t row = 0; row < height; ++row) {
+    for (size_t col = 0; col < width; ++col) {
+      for (size_t ch = 0; ch < channels; ++ch) {
         double sum = 0.0;
         for (int dy = -1; dy <= 1; ++dy) {
+          size_t src_y = mirror_coord(row, dy, height);
           for (int dx = -1; dx <= 1; ++dx) {
-            int src_y = mirror_coord(j + dy, input.height);
-            int src_x = mirror_coord(i + dx, input.width);
-            int idx = ((src_y * input.width + src_x) * input.channels) + ch;
-            sum += input.data[idx] * kGaussianKernel.at(dy + 1).at(dx + 1);
+            size_t src_x = mirror_coord(col, dx, width);
+            size_t src_idx = (src_y * row_stride) + (src_x * channels) + ch;
+            sum += data[src_idx] * kGaussianKernel.at(dy + 1).at(dx + 1);
           }
         }
-        int out_idx = ((j * input.width + i) * input.channels) + ch;
-        output.data[out_idx] = static_cast<uint8_t>(std::clamp(std::round(sum), 0.0, 255.0));
+        size_t out_idx = (row * row_stride) + (col * channels) + ch;
+        out_data[out_idx] = static_cast<uint8_t>(std::clamp(std::round(sum), 0.0, 255.0));
       }
     }
   }
-  return output;
+  return {out_metadata, out_data};
 }
 
-InType CreateGradientImage(int width, int height, int channels) {
-  InType img;
-  img.width = width;
-  img.height = height;
-  img.channels = channels;
+InType CreateGradientImage(ImageMetadata img_metadata) {
+  ImageData img_data;
+  const auto &[width, height, channels] = img_metadata;
+  img_data.resize(width * height * channels);
 
-  const size_t pixel_count = static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(channels);
-  img.data.resize(pixel_count);
-
-  for (int row = 0; row < height; ++row) {
-    for (int col = 0; col < width; ++col) {
-      for (int ch = 0; ch < channels; ++ch) {
-        const size_t idx = (static_cast<size_t>(row) * static_cast<size_t>(width) * static_cast<size_t>(channels)) +
-                           (static_cast<size_t>(col) * static_cast<size_t>(channels)) + static_cast<size_t>(ch);
-        img.data[idx] = static_cast<uint8_t>((col * 2 + row + ch * 50) % 256);
+  for (size_t row = 0; row < height; ++row) {
+    for (size_t col = 0; col < width; ++col) {
+      for (size_t ch = 0; ch < channels; ++ch) {
+        const size_t idx = (row * width * channels) + (col * channels) + ch;
+        img_data[idx] = static_cast<uint8_t>((col * 2 + row + ch * 50) % 256);
       }
     }
   }
 
-  return img;
+  return {img_metadata, img_data};
 }
 
 InType LoadRgbImage(const std::string &img_path) {
@@ -89,14 +90,15 @@ InType LoadRgbImage(const std::string &img_path) {
     throw std::runtime_error("Failed to load image '" + img_path + "': " + std::string(stbi_failure_reason()));
   }
 
-  InType img;
-  img.width = width;
-  img.height = height;
-  img.channels = STBI_rgb;
-  const auto bytes = static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(img.channels);
-  img.data.assign(data, data + bytes);
+  ImageMetadata img_metadata;
+  ImageData img_data;
+  img_metadata.width = static_cast<size_t>(width);
+  img_metadata.height = static_cast<size_t>(height);
+  img_metadata.channels = STBI_rgb;
+  const auto bytes = img_metadata.width * img_metadata.height * img_metadata.channels;
+  img_data.assign(data, data + bytes);
   stbi_image_free(data);
-  return img;
+  return {img_metadata, img_data};
 }
 
 }  // namespace
@@ -110,7 +112,7 @@ class OtcheskovSGaussFilterVertSplitValidationTestsProcesses
 
  protected:
   bool CheckTestOutputData(OutType &output_data) final {
-    return output_data.data.empty();
+    return output_data.second.empty();
   }
 
   InType GetTestInputData() final {
@@ -163,7 +165,7 @@ class OtcheskovSGaussFilterVertSplitFuncTestsProcesses : public ppc::util::BaseR
   void SetUp() override {
     const TestType &params = std::get<static_cast<std::size_t>(ppc::util::GTestParamIndex::kTestParams)>(GetParam());
     const InType &input_test_data = std::get<1>(params);
-    input_img_ = CreateGradientImage(input_test_data.width, input_test_data.height, input_test_data.channels);
+    input_img_ = CreateGradientImage(input_test_data.first);
     expect_img_ = ApplyGaussianFilter(input_img_);
   }
 
@@ -240,29 +242,28 @@ class OtcheskovSGaussFilterVertSplitRealTestsProcesses : public ppc::util::BaseR
 namespace {
 
 const std::array<TestType, 6> kTestValidParam = {
-    {{"empty_data", InType{.data = {}, .height = 3, .width = 3, .channels = 3}},
-     {"image_2x2x1_not_valid", InType{.data = {10, 12, 14, 15}, .height = 2, .width = 2, .channels = 2}},
+    {{"empty_data", {ImageMetadata{.height = 3, .width = 3, .channels = 3}, ImageData{}}},
+     {"image_2x2x1_not_valid", {ImageMetadata{.height = 2, .width = 2, .channels = 2}, ImageData{10, 12, 14, 15}}},
      {"image_3x3x1_wrong_size",
-      InType{.data = {10, 12, 14, 15, 16, 17, 18, 19, 50}, .height = 4, .width = 4, .channels = 3}},
+      {ImageMetadata{.height = 4, .width = 4, .channels = 3}, ImageData{10, 12, 14, 15, 16, 17, 18, 19, 50}}},
      {"image_3x3x1_wrong_height",
-      InType{.data = {10, 12, 14, 15, 16, 17, 18, 19, 50}, .height = 0, .width = 3, .channels = 1}},
+      {ImageMetadata{.height = 0, .width = 3, .channels = 1}, ImageData{10, 12, 14, 15, 16, 17, 18, 19, 50}}},
      {"image_3x3x1_wrong_width",
-      InType{.data = {10, 12, 14, 15, 16, 17, 18, 19, 50}, .height = 3, .width = 0, .channels = 1}},
+      {ImageMetadata{.height = 3, .width = 0, .channels = 1}, ImageData{10, 12, 14, 15, 16, 17, 18, 19, 50}}},
      {"image_3x3x1_wrong_channel",
-      InType{.data = {10, 12, 14, 15, 16, 17, 18, 19, 50}, .height = 3, .width = 3, .channels = 0}}}};
+      {ImageMetadata{.height = 3, .width = 3, .channels = 0}, ImageData{10, 12, 14, 15, 16, 17, 18, 19, 50}}}}};
 
 const std::array<TestType, 7> kTestFuncParam = {
-    {{"image_3x3x1", InType{.data = {}, .height = 3, .width = 3, .channels = 1}},
-     {"image_3x3x3", InType{.data = {}, .height = 3, .width = 3, .channels = 3}},
-     {"image_4x4x1", InType{.data = {}, .height = 4, .width = 4, .channels = 1}},
-     {"image_10x20x3", InType{.data = {}, .height = 10, .width = 20, .channels = 3}},
-     {"border_test_9x9", {.data = {}, .height = 9, .width = 9, .channels = 1}},
-     {"border_test_10x10", {.data = {}, .height = 10, .width = 10, .channels = 1}},
-     {"sharp_vertical_lines_15x15", {.data = {}, .height = 15, .width = 15, .channels = 3}}}};
+    {{"image_3x3x1", {ImageMetadata{.height = 3, .width = 3, .channels = 1}, ImageData{}}},
+     {"image_3x3x3", {ImageMetadata{.height = 3, .width = 3, .channels = 3}, ImageData{}}},
+     {"image_4x4x1", {ImageMetadata{.height = 4, .width = 4, .channels = 1}, ImageData{}}},
+     {"image_10x20x3", {ImageMetadata{.height = 10, .width = 20, .channels = 3}, ImageData{}}},
+     {"border_test_9x9", {ImageMetadata{.height = 9, .width = 9, .channels = 1}, ImageData{}}},
+     {"border_test_10x10", {ImageMetadata{.height = 10, .width = 10, .channels = 1}, ImageData{}}},
+     {"sharp_vertical_lines_15x15", {ImageMetadata{.height = 15, .width = 15, .channels = 3}, ImageData{}}}}};
 
 const std::array<TestType, 2> kTestRealParam = {
-    {{"chess.jpg", InType{.data = {}, .height = {}, .width = {}, .channels = {}}},
-     {"gradient.jpg", InType{.data = {}, .height = {}, .width = {}, .channels = {}}}}};
+    {{"chess.jpg", {ImageMetadata{}, ImageData{}}}, {"gradient.jpg", {ImageMetadata{}, ImageData{}}}}};
 
 const auto kTestValidTasksList = std::tuple_cat(ppc::util::AddFuncTask<OtcheskovSGaussFilterVertSplitMPI, InType>(
                                                     kTestValidParam, PPC_SETTINGS_otcheskov_s_gauss_filter_vert_split),

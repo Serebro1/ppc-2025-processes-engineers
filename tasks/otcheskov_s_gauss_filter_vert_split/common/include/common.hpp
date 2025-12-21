@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <tuple>
@@ -10,24 +11,24 @@
 
 namespace otcheskov_s_gauss_filter_vert_split {
 
-#pragma pack(push, 1)
-struct ImageData {
-  std::vector<uint8_t> data;
-  int height{};
-  int width{};
-  int channels{};
+struct ImageMetadata {
+  size_t height{};
+  size_t width{};
+  size_t channels{};
 
-  bool operator==(const ImageData &other) const {
-    return height == other.height && width == other.width && channels == other.channels && data == other.data;
+  bool operator==(const ImageMetadata &other) const {
+    return height == other.height && width == other.width && channels == other.channels;
   }
-  bool operator!=(const ImageData &other) const {
+  bool operator!=(const ImageMetadata &other) const {
     return !(*this == other);
   }
 };
-#pragma pack(pop)
 
-using InType = ImageData;
-using OutType = ImageData;
+using ImageData = std::vector<uint8_t>;
+using Image = std::pair<ImageMetadata, ImageData>;
+
+using InType = Image;
+using OutType = Image;
 using TestType = std::tuple<std::string, InType>;
 using BaseTask = ppc::task::Task<InType, OutType>;
 

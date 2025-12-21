@@ -15,16 +15,17 @@ otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::Otchesko
   GetInput() = in;
 }
 
-int otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::GetIndex(int row, int col, int channel) {
-  return (((row * GetInput().width) + col) * GetInput().channels) + channel;
+size_t otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::GetIndex(size_t row, size_t col,
+                                                                                        size_t channel) {
+  const auto &metadata = GetInput().first;
+  return (((row * metadata.width) + col) * metadata.channels) + channel;
 }
 
 bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::ValidationImpl() {
-  const auto &input = GetInput();
+  const auto &[metadata, data] = GetInput();
   bool is_valid = false;
-  is_valid = !input.data.empty() && (input.height >= 3 && input.width >= 3 && input.channels > 0) &&
-             (input.data.size() == static_cast<std::size_t>(input.height) * static_cast<size_t>(input.width) *
-                                       static_cast<size_t>(input.channels));
+  is_valid = !data.empty() && (metadata.height >= 3 && metadata.width >= 3 && metadata.channels > 0) &&
+             (data.size() == metadata.height * metadata.width * metadata.channels);
 
   return is_valid;
 }
@@ -34,50 +35,47 @@ bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::Pre
 }
 
 bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::RunImpl() {
-  const auto &input = GetInput();
-  bool is_valid = !input.data.empty() && (input.height >= 3 && input.width >= 3 && input.channels > 0) &&
-                  (input.data.size() == static_cast<std::size_t>(input.height) * static_cast<size_t>(input.width) *
-                                            static_cast<size_t>(input.channels));
+  const auto &[in_meta, in_data] = GetInput();
+  bool is_valid = false;
+  is_valid = !in_data.empty() && (in_meta.height >= 3 && in_meta.width >= 3 && in_meta.channels > 0) &&
+             (in_data.size() == in_meta.height * in_meta.width * in_meta.channels);
   if (!is_valid) {
     return false;
   }
-  auto &output = GetOutput();
-  output.height = input.height;
-  output.width = input.width;
-  output.channels = input.channels;
-  output.data.resize(input.data.size());
+  auto &[out_meta, out_data] = GetOutput();
+  out_meta = in_meta;
+  out_data.resize(in_data.size());
 
-  for (int y = 0; y < input.height; ++y) {
-    for (int x = 0; x < input.width; ++x) {
-      for (int ch = 0; ch < input.channels; ++ch) {
+  const auto &[height, width, channels] = in_meta;
+
+  auto mirror_coord = [](size_t curr, int off, size_t size) -> size_t {
+    ptrdiff_t pos = static_cast<ptrdiff_t>(curr) + off;
+    if (pos < 0) {
+      return static_cast<size_t>(-pos - 1);
+    }
+    if (static_cast<size_t>(pos) >= size) {
+      return 2 * size - static_cast<size_t>(pos) - 1;
+    }
+    return static_cast<size_t>(pos);
+  };
+
+  for (size_t row = 0; row < height; ++row) {
+    for (size_t col = 0; col < width; ++col) {
+      for (size_t ch = 0; ch < channels; ++ch) {
         double sum = 0.0;
 
-        for (int ky = -1; ky <= 1; ++ky) {
-          int yk = y + ky;
-          for (int kx = -1; kx <= 1; ++kx) {
-            int xk = x + kx;
-
-            if (yk < 0) {
-              yk = -yk - 1;
-            } else if (yk >= input.height) {
-              yk = (2 * input.height) - yk - 1;
-            }
-
-            if (xk < 0) {
-              xk = -xk - 1;
-            } else if (xk >= input.width) {
-              xk = (2 * input.width) - xk - 1;
-            }
-
-            double weight = kGaussianKernel.at(ky + 1).at(kx + 1);
-
-            int idx = GetIndex(yk, xk, ch);
-            sum += weight * input.data[idx];
+        for (int dy = -1; dy <= 1; ++dy) {
+          size_t src_y = mirror_coord(row, dy, height);
+          for (int dx = -1; dx <= 1; ++dx) {
+            size_t src_x = mirror_coord(col, dx, width);
+            double weight = kGaussianKernel.at(dy + 1).at(dx + 1);
+            size_t src_idx = GetIndex(src_y, src_x, ch);
+            sum += weight * in_data[src_idx];
           }
         }
 
-        int out_idx = GetIndex(y, x, ch);
-        output.data[out_idx] = static_cast<uint8_t>(std::clamp(std::round(sum), 0.0, 255.0));
+        size_t out_idx = GetIndex(row, col, ch);
+        out_data[out_idx] = static_cast<uint8_t>(std::clamp(std::round(sum), 0.0, 255.0));
       }
     }
   }
