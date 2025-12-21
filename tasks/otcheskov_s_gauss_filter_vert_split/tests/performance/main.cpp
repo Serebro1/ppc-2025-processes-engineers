@@ -38,7 +38,7 @@ class OtcheskovSGaussFilterVertSplitPerfTests : public ppc::util::BaseRunPerfTes
   InType input_img_;
 
   void SetUp() override {
-    input_img_ = CreateGradientImage(ImageMetadata{kMatrixSize, kMatrixSize, 3});
+    input_img_ = CreateGradientImage(ImageMetadata{.height = kMatrixSize, .width = kMatrixSize, .channels = 3});
   }
 
   bool CheckTestOutputData(OutType &output_img) final {

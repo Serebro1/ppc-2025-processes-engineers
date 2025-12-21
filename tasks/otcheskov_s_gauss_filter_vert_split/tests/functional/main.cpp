@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 #include "otcheskov_s_gauss_filter_vert_split/common/include/common.hpp"
@@ -31,11 +32,11 @@ InType ApplyGaussianFilter(const InType &input) {
   ImageData out_data = std::vector<uint8_t>(data.size());
 
   auto mirror_coord = [](size_t curr, int off, size_t size) {
-    long long pos = static_cast<long long>(curr) + off;
+    int64_t pos = static_cast<int64_t>(curr) + off;
     if (pos < 0) {
       return static_cast<size_t>(-pos - 1);
     }
-    if (static_cast<size_t>(pos) >= size) {
+    if (std::cmp_greater_equal(static_cast<uint64_t>(pos), size)) {
       return static_cast<size_t>((2 * size) - pos - 1);
     }
     return static_cast<size_t>(pos);

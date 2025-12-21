@@ -53,8 +53,8 @@ bool otcheskov_s_gauss_filter_vert_split::OtcheskovSGaussFilterVertSplitSEQ::Run
     if (pos < 0) {
       return static_cast<size_t>(-pos - 1);
     }
-    if (static_cast<size_t>(pos) >= size) {
-      return 2 * size - static_cast<size_t>(pos) - 1;
+    if (std::cmp_greater_equal(static_cast<size_t>(pos), size)) {
+      return (2 * size) - static_cast<size_t>(pos) - 1;
     }
     return static_cast<size_t>(pos);
   };
