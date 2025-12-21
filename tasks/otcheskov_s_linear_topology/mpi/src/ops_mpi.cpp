@@ -169,6 +169,7 @@ bool OtcheskovSLinearTopologyMPI::RunImpl() {
     check_passed = true;
   }
   GetOutput() = result_msg;
+  MPI_Barrier(MPI_COMM_WORLD);
   return check_passed;
 }
 
