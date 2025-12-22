@@ -24,7 +24,6 @@ class OtcheskovSGaussFilterVertSplitMPI : public BaseTask {
   bool PostProcessingImpl() override;
 
   void DistributeData();
-  void CalcLocalDims(const size_t &width);
   [[nodiscard]] std::pair<std::vector<int>, std::vector<int>> GetCountsAndDisplacements(const size_t &height,
                                                                                         const size_t &width,
                                                                                         const size_t &channels) const;
@@ -32,9 +31,6 @@ class OtcheskovSGaussFilterVertSplitMPI : public BaseTask {
   void ExchangeBoundaryColumns();
 
   void ApplyGaussianFilter();
-  [[nodiscard]] static size_t GetLocalIndex(const size_t &row, const size_t &local_col, const size_t &channel,
-                                            const size_t &width, const size_t &channels);
-  static size_t MirrorCoord(const size_t &current, int off, const size_t &size);
   uint8_t ProcessPixel(const size_t &row, const size_t &local_col, const size_t &ch, const size_t &height,
                        const size_t &channels);
   void CollectResults();

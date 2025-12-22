@@ -242,9 +242,8 @@ class OtcheskovSGaussFilterVertSplitRealTestsProcesses : public ppc::util::BaseR
 
 namespace {
 
-const std::array<TestType, 6> kTestValidParam = {
+const std::array<TestType, 5> kTestValidParam = {
     {{"empty_data", {ImageMetadata{.height = 3, .width = 3, .channels = 3}, ImageData{}}},
-     {"image_2x2x1_not_valid", {ImageMetadata{.height = 2, .width = 2, .channels = 2}, ImageData{10, 12, 14, 15}}},
      {"image_3x3x1_wrong_size",
       {ImageMetadata{.height = 4, .width = 4, .channels = 3}, ImageData{10, 12, 14, 15, 16, 17, 18, 19, 50}}},
      {"image_3x3x1_wrong_height",
@@ -254,8 +253,9 @@ const std::array<TestType, 6> kTestValidParam = {
      {"image_3x3x1_wrong_channel",
       {ImageMetadata{.height = 3, .width = 3, .channels = 0}, ImageData{10, 12, 14, 15, 16, 17, 18, 19, 50}}}}};
 
-const std::array<TestType, 7> kTestFuncParam = {
-    {{"image_3x3x1", {ImageMetadata{.height = 3, .width = 3, .channels = 1}, ImageData{}}},
+const std::array<TestType, 8> kTestFuncParam = {
+    {{"image_15x1x1", {ImageMetadata{.height = 15, .width = 1, .channels = 1}, ImageData{}}},
+     {"image_3x3x1", {ImageMetadata{.height = 3, .width = 3, .channels = 1}, ImageData{}}},
      {"image_3x3x3", {ImageMetadata{.height = 3, .width = 3, .channels = 3}, ImageData{}}},
      {"image_4x4x1", {ImageMetadata{.height = 4, .width = 4, .channels = 1}, ImageData{}}},
      {"image_10x20x3", {ImageMetadata{.height = 10, .width = 20, .channels = 3}, ImageData{}}},
